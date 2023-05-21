@@ -235,7 +235,7 @@ def wind_expr() -> Parser:
             zero_or_more(g),
             any_(mps, kt, kmh),
         ),
-        lambda v: WindExpr(v[0], v[1], v[-1], "G" if v[2] == "G" else None),
+        lambda v: WindExpr(v[0], v[1], v[-1], v[3] if v[2] == "G" else None),
     )
 
 
