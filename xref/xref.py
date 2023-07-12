@@ -7,9 +7,9 @@ Refs:
 """
 from collections import defaultdict
 
-from idc import get_func_name
+from idc import get_func_name, get_name
 from ida_funcs import get_func
-from idautils import CodeRefsTo
+from idautils import XrefsTo
 from idaapi import (
     PluginForm,
     action_handler_t,
@@ -26,9 +26,17 @@ from ida_kernwin import jumpto
 from PyQt5.QtWidgets import QVBoxLayout, QTreeWidget, QTreeWidgetItem
 
 
-def generate_func_info(addr: int):
+def generate_info(addr: int):
     name = get_func_name(addr)
-    addr = get_func(addr).start_ea
+    if not name:
+        # addr isn't points to a function
+        name = get_name(addr)
+        if not name:
+            name = hex(addr)
+        addr = addr
+    else:
+        fnc = get_func(addr)
+        addr = fnc.start_ea
     return name, addr
 
 
@@ -53,7 +61,7 @@ class XrefForm(PluginForm):
         self.tree.doubleClicked.connect(self.doubleclk_tree_item)
 
         # Generate root_addr's info as root item
-        name, addr = generate_func_info(self.root_addr)
+        name, addr = generate_info(self.root_addr)
         item = QTreeWidgetItem(self.tree)
         item.setText(0, name)
         item.setText(1, hex(addr))
@@ -69,19 +77,19 @@ class XrefForm(PluginForm):
         if self.xrefed[addr]:
             # Skip already generated xref address
             return True
-        for xref in CodeRefsTo(int(addr, 16), 0):
+        for xref in XrefsTo(int(addr, 16), 0):
             # Add xref to item's child
-            xname, xaddr = generate_func_info(xref)
+            xname, xaddr = generate_info(xref.frm)
             child = QTreeWidgetItem(item)
             child.setText(0, xname)
             child.setText(1, hex(xaddr))
-            child.setText(2, hex(xref))
+            child.setText(2, hex(xref.frm))
         self.tree.expandItem(item)
         self.xrefed[addr] = True
 
     def doubleclk_tree_item(self, idx):
         item = self.tree.currentItem()
-        addr = item.text(1)
+        addr = item.text(2)
         jumpto(int(addr, 16))
 
 
