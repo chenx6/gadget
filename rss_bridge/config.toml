@@ -1,0 +1,10 @@
+aria2_url = "http://127.0.0.1:6800/jsonrpc"
+token = ""
+dir = "/tmp"
+exclude = "繁|720p"
+shortcuts = [
+    { name = "mikan", alias = "https://mikanime.tv/RSS/" }
+]
+subscribes = [
+    { name = "星灵感应(Ani)", time = 2023-10-01, url = "https://mikanime.tv/RSS/Bangumi?bangumiId=3144&subgroupid=583"}
+]
