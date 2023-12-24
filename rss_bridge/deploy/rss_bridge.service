@@ -1,0 +1,12 @@
+[Unit]
+Description=rss bridge
+After=network.target aria2.service
+
+[Service]
+User=nobody
+Group=nogroup
+WorkingDirectory=/path/to/rss_bridge
+ExecStart=/bin/bash -c 'source venv/bin/activate && python3 app.py'
+
+[Install]
+WantedBy=multi-user.target

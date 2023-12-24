@@ -1,0 +1,11 @@
+[Unit]
+Description=aria2 downloader
+After=network.target
+
+[Service]
+User=nobody
+Group=nogroup
+ExecStart=/usr/bin/aria2c --conf-path /path/to/aria2.conf
+
+[Install]
+WantedBy=multi-user.target
