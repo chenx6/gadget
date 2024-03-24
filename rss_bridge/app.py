@@ -12,6 +12,7 @@ from base64 import b64encode
 from pathlib import Path
 from traceback import format_exc
 from functools import wraps
+from datetime import datetime
 
 from feedparser import parse as parse_feed
 from schedule import every, run_pending, CancelJob
@@ -22,6 +23,7 @@ class Subscribe(NamedTuple):
     name: str
     time: datetime
     url: str
+    on_air_range: int
     exclude: str | None = None
     include: str | None = None
 
@@ -130,7 +132,21 @@ def load_config() -> tuple[dict[str, Any], list[Subscribe]]:
             for shortcut in conf["shortcuts"]:
                 if url.startswith(shortcut["name"]):
                     url = url.replace(f'{shortcut["name"]}://', shortcut["alias"], 1)
-            subs.append(Subscribe(sub["name"], sub["time"], url, sub.get("exclude")))
+            # Load on air range
+            if oar := sub.get("on_air_range"):
+                on_air_range = int(oar)
+            else:
+                on_air_range = 90
+            subs.append(
+                Subscribe(
+                    sub["name"],
+                    sub["time"],
+                    url,
+                    on_air_range,
+                    sub.get("exclude"),
+                    sub.get("include"),
+                )
+            )
             logger.debug(f"Sub name {sub['name']}, {url}")
         logger.info(f"Loading {len(subs)} config")
         return conf, subs
@@ -139,8 +155,14 @@ def load_config() -> tuple[dict[str, Any], list[Subscribe]]:
 @catch_exceptions(True)
 def update_rss(subs: list[Subscribe], excl: str | None = None, incl: str | None = None):
     """Timer triggered rss updater"""
-    logger.info("Updating...")
+    curr_time = datetime.now()
+    logger.info(f"Updating in {curr_time}...")
     for sub in subs:
+        # If current time doesn't in on air time, skip it
+        on_air_days = curr_time - sub.time
+        if on_air_days.days > sub.on_air_range:
+            logger.debug("Time expired, skip")
+            continue
         feed = parse_feed(sub.url)
         for entry in feed.entries:
             ent_id = entry.id
