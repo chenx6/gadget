@@ -1,0 +1,71 @@
+packages = ["syncthing", "aria2", "fail2ban", "neovim"]
+
+[config]
+[config.aria2]
+path = "/etc/aria2.conf"
+content = """
+dir={{aria2_dir}}
+continue=true
+
+input-file={{aria2_dir}}/aria2.session
+save-session={{aria2_dir}}/aria2.session
+
+enable-rpc=true
+rpc-listen-all=true
+rpc-secret={{rpc_secret}}
+rpc-allow-origin-all=true
+
+enable-dht=true
+dht-file-path={{aria2_dir}}/dht.dat
+dht-file-path6={{aria2_dir}}/dht6.dat
+bt-enable-lpd=true
+enable-peer-exchange=true
+bt-tracker={{bt_tracker}}
+"""
+
+[config.fail2ban_sshd]
+path = "/etc/fail2ban/jail.d/sshd.conf"
+content = """
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = %(sshd_log)s
+bantime = 3600
+findtime = 3600
+maxretry = 5
+"""
+
+[config.fail2ban_default]
+path = "/etc/fail2ban/jail.d/default.conf"
+content = """
+[DEFAULT]
+backend = systemd
+"""
+
+[config.neovim]
+path = "~/.config/nvim/init.lua"
+content = """
+vim.opt.number = true
+vim.opt.cursorline = true
+vim.opt.tabstop = 4
+vim.opt.softtabstop = 4
+vim.opt.shiftwidth = 4
+vim.opt.expandtab = true
+"""
+
+[service]
+[service.aria2]
+content = """
+[Unit]
+Description=aria2 downloader
+After=network.target
+
+[Service]
+User=nobody
+Group=nogroup
+ExecStart=/usr/bin/aria2c --conf-path /etc/aria2.conf
+
+[Install]
+WantedBy=multi-user.target
+"""
