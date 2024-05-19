@@ -5,14 +5,13 @@ from re import search
 from tomllib import load as load_toml
 from sqlite3 import connect
 from typing import Any, NamedTuple
-from datetime import datetime
+from datetime import datetime, date, time
 from logging import getLogger, basicConfig, DEBUG
 from time import sleep
 from base64 import b64encode
 from pathlib import Path
 from traceback import format_exc
 from functools import wraps
-from datetime import datetime
 
 from feedparser import parse as parse_feed
 from schedule import every, run_pending, CancelJob
@@ -21,7 +20,7 @@ from requests import post, get
 
 class Subscribe(NamedTuple):
     name: str
-    time: datetime
+    time: date
     url: str
     on_air_range: int
     exclude: str | None = None
@@ -52,10 +51,8 @@ def catch_exceptions(cancel_on_failure=False):
         def wrapper(*args, **kwargs):
             try:
                 return job_func(*args, **kwargs)
-            except:
-                import traceback
-
-                print(traceback.format_exc())
+            except Exception:
+                logger.error(format_exc())
                 if cancel_on_failure:
                     return CancelJob
 
@@ -159,11 +156,12 @@ def update_rss(subs: list[Subscribe], excl: str | None = None, incl: str | None 
     logger.info(f"Updating in {curr_time}...")
     for sub in subs:
         # If current time doesn't in on air time, skip it
-        on_air_days = curr_time - sub.time
+        on_air_days = curr_time - datetime.combine(sub.time, time(0, 0))
         if on_air_days.days > sub.on_air_range:
             logger.debug("Time expired, skip")
             continue
-        feed = parse_feed(sub.url)
+        feed_resp = get(sub.url, timeout=60)
+        feed = parse_feed(feed_resp.text)
         for entry in feed.entries:
             ent_id = entry.id
             # Use subscribe specify exculde rule first
@@ -172,16 +170,19 @@ def update_rss(subs: list[Subscribe], excl: str | None = None, incl: str | None 
                 curr_excl = sub.exclude
             # Check entry need should be excluded or not
             if curr_excl and (ns := search(curr_excl, ent_id)):
+                logger.debug(f"Exclude {ns.group()} by pattern {curr_excl}")
                 continue
             if not incl or (s := search(incl, ent_id)):
                 # Find torrent url
                 for link in entry.links:
-                    if link.type == "application/x-bittorrent" and not is_downloaded(
-                        link.href
-                    ):
+                    if link.type != "application/x-bittorrent":
+                        continue
+                    if not is_downloaded(link.href):
                         logger.info(f"Downloading new {ent_id} from {link.href}")
                         if sendto_aria2(link.href, sub.name) == 200:
                             set_download(ent_id, link.href)
+                    else:
+                        logger.debug(f"Already downloaded {ent_id}")
     logger.info("Update done")
 
 
