@@ -149,7 +149,7 @@ def load_config() -> tuple[dict[str, Any], list[Subscribe]]:
         return conf, subs
 
 
-@catch_exceptions(True)
+@catch_exceptions()
 def update_rss(subs: list[Subscribe], excl: str | None = None, incl: str | None = None):
     """Timer triggered rss updater"""
     curr_time = datetime.now()
