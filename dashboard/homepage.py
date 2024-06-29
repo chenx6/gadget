@@ -17,10 +17,20 @@ def get_homepage_content():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/picnic">
+        <title>Dashboard</title>
     </head>
     <body>
-        <main style="max-width:800px; margin:0 auto">
+        <style>
+        .content {
+            max-width:800px;
+            margin:0 auto;
+        }
+        .card {
+            box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px;
+            padding: 8px 16px 8px 12px;
+        }
+        </style>
+        <main class="content">
     """
     for name, info in config["homepage"].items():
         url = info["url"]
