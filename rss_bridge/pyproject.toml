@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "rss-bridge"
+version = "0.1.0"
+description = ""
+authors = ["chen_null <abc82766@gmail.com>"]
+readme = "README.md"
+packages = [{include = "rss_bridge"}]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+feedparser = "6.0.10"
+requests = "2.31.0"
+schedule = "1.2.1"
+
+[tool.poetry.scripts]
+rss_bridge = 'rss_bridge:app'
+
+[[tool.poetry.source]]
+name = "tsinghua"
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,10 +1,11 @@
 """
 load config => start timer => process subscribes
 """
+
 from re import search
 from tomllib import load as load_toml
 from sqlite3 import connect
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypedDict
 from datetime import datetime, date, time
 from logging import getLogger, basicConfig, DEBUG
 from time import sleep
@@ -12,6 +13,7 @@ from base64 import b64encode
 from pathlib import Path
 from traceback import format_exc
 from functools import wraps
+from os import environ
 
 from feedparser import parse as parse_feed
 from schedule import every, run_pending, CancelJob
@@ -27,22 +29,19 @@ class Subscribe(NamedTuple):
     include: str | None = None
 
 
-class Shortcut(NamedTuple):
+class Shortcut(TypedDict):
     name: str
     alias: str
 
 
-class Config(NamedTuple):
+class Config(TypedDict):
     aria2_url: str
-    shortcuts: list[Any]
-    subscribes: list[Subscribe]
-    exclude: str | None = None
-    include: str | None = None
-
-
-basicConfig(level=DEBUG)
-logger = getLogger("bridge")
-db = connect("./record.db")
+    token: str
+    dir: str
+    exclude: str | None
+    include: str | None
+    shortcuts: list[Shortcut]
+    subscribes: list[dict[str, Any]]
 
 
 def catch_exceptions(cancel_on_failure=False):
@@ -117,11 +116,11 @@ def sendto_aria2(url: str, name: str):
     return resp.status_code
 
 
-def load_config() -> tuple[dict[str, Any], list[Subscribe]]:
+def load_config(config_path: str) -> tuple[Config, list[Subscribe]]:
     """Load config from config.toml file"""
     subs = []
-    with open("config.toml", "rb") as f:
-        conf = load_toml(f)
+    with open(config_path, "rb") as f:
+        conf: Config = load_toml(f)  # type: ignore
         # Load subscribers
         for sub in conf["subscribes"]:
             url: str = sub["url"]
@@ -150,8 +149,10 @@ def load_config() -> tuple[dict[str, Any], list[Subscribe]]:
 
 
 @catch_exceptions()
-def update_rss(subs: list[Subscribe], excl: str | None = None, incl: str | None = None):
+def update_rss(subs: list[Subscribe]):
     """Timer triggered rss updater"""
+    excl = conf.get("exclude")
+    incl = conf.get("include")
     curr_time = datetime.now()
     logger.info(f"Updating in {curr_time}...")
     for sub in subs:
@@ -172,7 +173,7 @@ def update_rss(subs: list[Subscribe], excl: str | None = None, incl: str | None 
             if curr_excl and (ns := search(curr_excl, ent_id)):
                 logger.debug(f"Exclude {ns.group()} by pattern {curr_excl}")
                 continue
-            if not incl or (s := search(incl, ent_id)):
+            if not incl or search(incl, ent_id):
                 # Find torrent url
                 for link in entry.links:
                     if link.type != "application/x-bittorrent":
@@ -186,15 +187,24 @@ def update_rss(subs: list[Subscribe], excl: str | None = None, incl: str | None 
     logger.info("Update done")
 
 
-test = False
-init_db()
-conf, subs = load_config()
-if test:
-    update_rss(subs, conf["exclude"])
-    exit(0)
-job = lambda: update_rss(subs, conf["exclude"])
-every(1).hours.do(job)  # Execute update every 1 hour
-job()  # There will be a long pending time
-while True:
-    run_pending()
-    sleep(60)
+if __name__ == "__main__":
+
+    def schedule_job():
+        update_rss(subs)
+
+    TEST = bool(environ.get("RSS_BRIDGE_TEST", "false"))
+    CONFIG_PATH = environ.get("RSS_BRIDGE_CONFIG", "config.toml")
+    DB_PATH = environ.get("RSS_BRIDGE_DB", "record.db")
+    basicConfig(level=DEBUG)
+    logger = getLogger("bridge")
+    db = connect(DB_PATH)
+    init_db()
+    conf, subs = load_config(CONFIG_PATH)
+    if TEST:
+        schedule_job()
+        exit(0)
+    every(1).hours.do(schedule_job)  # Execute update every 1 hour
+    schedule_job()  # There will be a long pending time
+    while True:
+        run_pending()
+        sleep(60)
