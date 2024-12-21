@@ -1,0 +1,12 @@
+[Unit]
+Description=aria2 downloader
+After=network.target
+
+[Service]
+User=aria2
+Group=aria2
+# DynamicUser=yes
+ExecStart=/usr/bin/aria2c --conf-path /etc/aria2/aria2.conf
+
+[Install]
+WantedBy=multi-user.target

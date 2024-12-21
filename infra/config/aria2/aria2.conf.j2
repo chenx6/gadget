@@ -1,0 +1,17 @@
+dir={{ config.download_dir }}
+continue=true
+
+input-file={{ config.download_dir }}/aria2.session
+save-session={{ config.download_dir }}/aria2.session
+
+enable-rpc=true
+rpc-listen-all=true
+rpc-secret=123456
+rpc-allow-origin-all=true
+
+enable-dht=true
+dht-file-path={{ config.download_dir }}/dht.dat
+dht-file-path6={{ config.download_dir }}/dht6.dat
+bt-enable-lpd=true
+enable-peer-exchange=true
+bt-tracker=
