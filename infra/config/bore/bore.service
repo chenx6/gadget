@@ -1,0 +1,9 @@
+[Unit]
+Description=bore service
+After=network.target
+
+[Service]
+ExecStart=/opt/bore/bore server --secret yourpassword
+
+[Install]
+WantedBy=multi-user.target
