@@ -127,7 +127,7 @@ def load_config(config_path: str) -> tuple[Config, list[Subscribe]]:
             # Replace shortcut in url
             for shortcut in conf["shortcuts"]:
                 if url.startswith(shortcut["name"]):
-                    url = url.replace(f'{shortcut["name"]}://', shortcut["alias"], 1)
+                    url = url.replace(f"{shortcut['name']}://", shortcut["alias"], 1)
             # Load on air range
             if oar := sub.get("on_air_range"):
                 on_air_range = int(oar)
@@ -187,24 +187,26 @@ def update_rss(subs: list[Subscribe]):
     logger.info("Update done")
 
 
-if __name__ == "__main__":
-
-    def schedule_job():
-        update_rss(subs)
-
-    TEST = bool(environ.get("RSS_BRIDGE_TEST", "false"))
-    CONFIG_PATH = environ.get("RSS_BRIDGE_CONFIG", "config.toml")
-    DB_PATH = environ.get("RSS_BRIDGE_DB", "record.db")
-    basicConfig(level=DEBUG)
-    logger = getLogger("bridge")
-    db = connect(DB_PATH)
-    init_db()
-    conf, subs = load_config(CONFIG_PATH)
-    if TEST:
-        schedule_job()
-        exit(0)
+def main():
     every(1).hours.do(schedule_job)  # Execute update every 1 hour
     schedule_job()  # There will be a long pending time
     while True:
         run_pending()
         sleep(60)
+
+
+def schedule_job():
+    update_rss(subs)
+
+
+TEST = environ.get("RSS_BRIDGE_TEST", False)
+CONFIG_PATH = environ.get("RSS_BRIDGE_CONFIG", "config.toml")
+DB_PATH = environ.get("RSS_BRIDGE_DB", "record.db")
+basicConfig(level=DEBUG)
+logger = getLogger("bridge")
+db = connect(DB_PATH)
+init_db()
+conf, subs = load_config(CONFIG_PATH)
+if TEST:
+    schedule_job()
+    exit(0)

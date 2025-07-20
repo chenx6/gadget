@@ -14,7 +14,7 @@ requests = "2.31.0"
 schedule = "1.2.1"
 
 [tool.poetry.scripts]
-rss_bridge = 'rss_bridge.app'
+rss_bridge = 'rss_bridge.app:main'
 
 [[tool.poetry.source]]
 name = "tsinghua"
