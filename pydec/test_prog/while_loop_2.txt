@@ -1,0 +1,31 @@
+  8           0 RESUME                   0
+
+  9           2 LOAD_CONST               1 (0)
+              4 STORE_FAST               0 (i)
+
+ 10           6 LOAD_FAST                0 (i)
+              8 LOAD_CONST               2 (10)
+             10 COMPARE_OP               0 (<)
+             16 POP_JUMP_FORWARD_IF_FALSE    21 (to 60)
+
+ 11     >>   18 LOAD_FAST                0 (i)
+             20 LOAD_CONST               3 (2)
+             22 BINARY_OP                6 (%)
+             26 LOAD_CONST               1 (0)
+             28 COMPARE_OP               2 (==)
+             34 POP_JUMP_FORWARD_IF_FALSE     1 (to 38)
+
+ 12          36 JUMP_FORWARD            11 (to 60)
+
+ 13     >>   38 LOAD_FAST                0 (i)
+             40 LOAD_CONST               4 (1)
+             42 BINARY_OP               13 (+=)
+             46 STORE_FAST               0 (i)
+
+ 10          48 LOAD_FAST                0 (i)
+             50 LOAD_CONST               2 (10)
+             52 COMPARE_OP               0 (<)
+             58 POP_JUMP_BACKWARD_IF_TRUE    21 (to 18)
+
+ 14     >>   60 LOAD_FAST                0 (i)
+             62 RETURN_VALUE

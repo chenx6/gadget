@@ -1,0 +1,19 @@
+  6           0 RESUME                   0
+
+  7           2 LOAD_FAST                0 (a)
+              4 STORE_FAST               2 (value)
+
+  8           6 LOAD_FAST                0 (a)
+              8 LOAD_FAST                1 (b)
+             10 COMPARE_OP               4 (>)
+             16 POP_JUMP_FORWARD_IF_FALSE     3 (to 24)
+
+  9          18 LOAD_FAST                0 (a)
+             20 STORE_FAST               2 (value)
+             22 JUMP_FORWARD             2 (to 28)
+
+ 11     >>   24 LOAD_FAST                1 (b)
+             26 STORE_FAST               2 (value)
+
+ 12     >>   28 LOAD_FAST                2 (value)
+             30 RETURN_VALUE

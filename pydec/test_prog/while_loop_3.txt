@@ -1,0 +1,20 @@
+ 17           0 RESUME                   0
+
+ 18           2 LOAD_GLOBAL              1 (NULL + range)
+             14 LOAD_CONST               1 (1)
+             16 LOAD_CONST               2 (100)
+             18 PRECALL                  2
+             22 CALL                     2
+             32 GET_ITER
+        >>   34 FOR_ITER                17 (to 70)
+             36 STORE_FAST               0 (i)
+
+ 19          38 LOAD_GLOBAL              3 (NULL + print)
+             50 LOAD_FAST                0 (i)
+             52 PRECALL                  1
+             56 CALL                     1
+             66 POP_TOP
+             68 JUMP_BACKWARD           18 (to 34)
+
+ 20     >>   70 LOAD_CONST               3 (0)
+             72 RETURN_VALUE

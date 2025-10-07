@@ -1,0 +1,86 @@
+  1           0 RESUME                   0
+
+  2           2 BUILD_LIST               0
+              4 STORE_FAST               1 (result)
+
+  3           6 LOAD_CONST               1 (0)
+              8 STORE_FAST               2 (i)
+
+  4          10 LOAD_FAST                2 (i)
+             12 LOAD_CONST               2 (10)
+             14 COMPARE_OP               0 (<)
+             20 POP_JUMP_FORWARD_IF_FALSE   147 (to 316)
+
+  5     >>   22 LOAD_FAST                2 (i)
+             24 LOAD_CONST               3 (3)
+             26 BINARY_OP                6 (%)
+             30 LOAD_CONST               1 (0)
+             32 COMPARE_OP               2 (==)
+             38 POP_JUMP_FORWARD_IF_FALSE    31 (to 102)
+             40 LOAD_FAST                2 (i)
+             42 LOAD_CONST               4 (5)
+             44 BINARY_OP                6 (%)
+             48 LOAD_CONST               1 (0)
+             50 COMPARE_OP               2 (==)
+             56 POP_JUMP_FORWARD_IF_FALSE    22 (to 102)
+
+  6          58 LOAD_FAST                1 (result)
+             60 LOAD_METHOD              0 (append)
+             82 LOAD_CONST               5 ('FizzBuzz')
+             84 PRECALL                  1
+             88 CALL                     1
+             98 POP_TOP
+            100 JUMP_FORWARD            96 (to 294)
+
+  7     >>  102 LOAD_FAST                2 (i)
+            104 LOAD_CONST               3 (3)
+            106 BINARY_OP                6 (%)
+            110 LOAD_CONST               1 (0)
+            112 COMPARE_OP               2 (==)
+            118 POP_JUMP_FORWARD_IF_FALSE    22 (to 164)
+
+  8         120 LOAD_FAST                1 (result)
+            122 LOAD_METHOD              0 (append)
+            144 LOAD_CONST               6 ('Fizz')
+            146 PRECALL                  1
+            150 CALL                     1
+            160 POP_TOP
+            162 JUMP_FORWARD            65 (to 294)
+
+  9     >>  164 LOAD_FAST                2 (i)
+            166 LOAD_CONST               4 (5)
+            168 BINARY_OP                6 (%)
+            172 LOAD_CONST               1 (0)
+            174 COMPARE_OP               2 (==)
+            180 POP_JUMP_FORWARD_IF_FALSE    22 (to 226)
+
+ 10         182 LOAD_FAST                1 (result)
+            184 LOAD_METHOD              0 (append)
+            206 LOAD_CONST               7 ('Buzz')
+            208 PRECALL                  1
+            212 CALL                     1
+            222 POP_TOP
+            224 JUMP_FORWARD            34 (to 294)
+
+ 12     >>  226 LOAD_FAST                1 (result)
+            228 LOAD_METHOD              0 (append)
+            250 LOAD_GLOBAL              3 (NULL + str)
+            262 LOAD_FAST                2 (i)
+            264 PRECALL                  1
+            268 CALL                     1
+            278 PRECALL                  1
+            282 CALL                     1
+            292 POP_TOP
+
+ 13     >>  294 LOAD_FAST                2 (i)
+            296 LOAD_CONST               8 (1)
+            298 BINARY_OP               13 (+=)
+            302 STORE_FAST               2 (i)
+
+  4         304 LOAD_FAST                2 (i)
+            306 LOAD_CONST               2 (10)
+            308 COMPARE_OP               0 (<)
+            314 POP_JUMP_BACKWARD_IF_TRUE   147 (to 22)
+
+ 14     >>  316 LOAD_FAST                1 (result)
+            318 RETURN_VALUE

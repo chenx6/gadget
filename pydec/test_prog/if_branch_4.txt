@@ -1,0 +1,55 @@
+ 35           0 RESUME                   0
+
+ 36           2 LOAD_FAST                0 (a)
+              4 LOAD_FAST                1 (b)
+              6 BINARY_OP                0 (+)
+             10 STORE_FAST               2 (c)
+
+ 37          12 LOAD_FAST                0 (a)
+             14 LOAD_CONST               1 (1)
+             16 COMPARE_OP               4 (>)
+             22 POP_JUMP_FORWARD_IF_FALSE     9 (to 42)
+             24 LOAD_FAST                1 (b)
+             26 LOAD_CONST               2 (2)
+             28 COMPARE_OP               4 (>)
+             34 POP_JUMP_FORWARD_IF_FALSE     3 (to 42)
+
+ 38          36 LOAD_CONST               3 (0)
+             38 STORE_FAST               3 (res)
+             40 JUMP_FORWARD            38 (to 118)
+
+ 39     >>   42 LOAD_FAST                0 (a)
+             44 LOAD_CONST               2 (2)
+             46 COMPARE_OP               4 (>)
+             52 POP_JUMP_FORWARD_IF_TRUE     6 (to 66)
+             54 LOAD_FAST                1 (b)
+             56 LOAD_CONST               4 (3)
+             58 COMPARE_OP               4 (>)
+             64 POP_JUMP_FORWARD_IF_FALSE     3 (to 72)
+
+ 40     >>   66 LOAD_CONST               1 (1)
+             68 STORE_FAST               3 (res)
+             70 JUMP_FORWARD            23 (to 118)
+
+ 41     >>   72 LOAD_FAST                0 (a)
+             74 LOAD_CONST               4 (3)
+             76 COMPARE_OP               4 (>)
+             82 POP_JUMP_FORWARD_IF_TRUE    12 (to 108)
+             84 LOAD_FAST                1 (b)
+             86 LOAD_CONST               5 (4)
+             88 COMPARE_OP               4 (>)
+             94 POP_JUMP_FORWARD_IF_FALSE     9 (to 114)
+             96 LOAD_FAST                2 (c)
+             98 LOAD_CONST               6 (5)
+            100 COMPARE_OP               0 (<)
+            106 POP_JUMP_FORWARD_IF_FALSE     3 (to 114)
+
+ 42     >>  108 LOAD_CONST               2 (2)
+            110 STORE_FAST               3 (res)
+            112 JUMP_FORWARD             2 (to 118)
+
+ 44     >>  114 LOAD_CONST               4 (3)
+            116 STORE_FAST               3 (res)
+
+ 45     >>  118 LOAD_FAST                3 (res)
+            120 RETURN_VALUE

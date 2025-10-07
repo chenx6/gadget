@@ -1,0 +1,348 @@
+from collections import defaultdict
+from re import compile as re_compile, sub
+from typing import TYPE_CHECKING
+
+import networkx as nx
+
+from model import (
+    IfElseMultipleNode,
+    Instruction,
+    DecompLine,
+    DecompLines,
+    Block,
+    GraphFromTo,
+    IfElseNode,
+    WhileLoopNode,
+)
+from havlak import havlak
+
+if TYPE_CHECKING:
+    from model import Node
+
+
+def parse_pycdas_output(output: str):
+    insts: DecompLines = []
+    for line in output.split("\n"):
+        toks = [tok.strip() for tok in line.split("  ") if tok]
+        match len(toks):
+            case 2:
+                linenum, op = toks
+                args = ""
+            case 3:
+                linenum, op, mem = toks
+                args = mem.split(": ")[-1]
+                if "(" in args:
+                    args = sub(r".+ \((.+)\)", "\\1", args)
+            case _:
+                continue
+        insts.append(DecompLine(int(linenum), Instruction(op, args)))
+    return insts
+
+
+def parse_dis_output(output: str):
+    #  53     >>  184 LOAD_FAST                0 (l)
+    tokenizer = re_compile(r"(\d+) ([\w_]+)[ ]*(\d+)*[ ]*(\(.+\))*")
+    insts: DecompLines = []
+    for line in output.split("\n"):
+        m = tokenizer.search(line)
+        if m:
+            toks = m.groups()
+            linenum, op, arg, argp = toks
+            if argp:
+                argp = argp.removeprefix("(").removesuffix(")")
+            else:
+                argp = ""
+            insts.append(DecompLine(int(linenum), Instruction(op, argp)))
+    return insts
+
+
+def split_block_sep(insts: DecompLines):
+    COND_JUMP = [
+        "POP_JUMP_FORWARD_IF_FALSE",
+        "POP_JUMP_BACKWARD_IF_TRUE",
+        "POP_JUMP_FORWARD_IF_TRUE",
+    ]
+    TERMINATOR = [
+        "JUMP_FORWARD",
+        "JUMP_BACKWARD",
+        "RETURN_VALUE",
+    ] + COND_JUMP
+    blocks: list[Block] = []
+    from_to: list[GraphFromTo] = []
+    curr_insts: DecompLines = []
+    # Collect relation between instructions
+    for linenum, inst in insts:
+        curr_insts.append(DecompLine(linenum, inst))
+        curr_block_label = str(curr_insts[0].linenum)
+        if inst.op in TERMINATOR:
+            if inst.op in COND_JUMP:
+                # Connect if block
+                from_to.append((curr_block_label, str(linenum + 2)))
+            from_to.append((curr_block_label, inst.args.replace("to ", "")))
+            curr_insts = []
+        elif inst.op == "FOR_ITER":
+            from_to.append((str(linenum), inst.args.replace("to ", "")))
+            curr_insts = [DecompLine(linenum, inst)]
+    # Split by relation
+    curr_insts = []
+    splitor = set([i[0] for i in from_to] + [i[1] for i in from_to])
+    for linenum, inst in insts:
+        curr_insts.append(DecompLine(linenum, inst))
+        if linenum != 0 and str(linenum) in splitor:
+            curr_block_label = str(curr_insts[0].linenum)
+            end_inst = curr_insts.pop()
+            blocks.append(Block(curr_block_label, tuple(curr_insts)))
+            curr_insts = [end_inst]
+    if curr_insts:
+        blocks.append(Block(str(curr_insts[0].linenum), tuple(curr_insts)))
+    # If end of a block is not terminator, connect it to next block
+    for idx in range(len(blocks)):
+        curr_block = blocks[idx]
+        if curr_block.insts[-1].inst.op not in TERMINATOR:
+            # Fix false judgement when block is not ends with TERMINATOR
+            false_judge = [i for i in from_to if i[0] == curr_block.label]
+            from_to = [i for i in from_to if i[0] != curr_block.label]
+            next_block = blocks[idx + 1]
+            from_to.append((curr_block.label, next_block.label))
+            for from_, to in false_judge:
+                from_to.append((next_block.label, to))
+    # Map blocks to Graph
+    graph: "nx.DiGraph[Node]" = nx.DiGraph()
+    graph.add_nodes_from(blocks)
+    block_dic = dict((i.label, i) for i in blocks)
+    block_dic["1919810"] = Block("1919810", ())
+    for from_, to in from_to:
+        if not to:
+            to = "1919810"
+        graph.add_edge(block_dic[from_], block_dic[to])
+    return graph
+
+
+def topological_sort(graph: "nx.DiGraph[Node]"):
+    """
+    Ref: https://github.com/angr/angr/blob/master/angr/utils/graph.py#L704
+    """
+    # Find and mark strongly connected components
+    sccs = list(nx.strongly_connected_components(graph))
+    node_idx: dict[str, int] = {}
+    idx_node = defaultdict(list)
+    for idx, scc in enumerate(sccs):
+        if len(scc) <= 1:
+            continue
+        for node in scc:
+            node_idx[node.label] = idx
+            idx_node[idx].append(node)
+    # Replace SCC with mark
+    graph_copy = nx.DiGraph()
+    for src, dst in graph.edges():
+        if src_idx := node_idx.get(src.label):
+            src = src_idx
+            graph_copy.add_node(src_idx)
+        if dst_idx := node_idx.get(dst.label):
+            dst = dst_idx
+            graph_copy.add_node(dst_idx)
+        if src == dst:
+            graph_copy.add_node(src)
+            continue
+        graph_copy.add_edge(src, dst)
+    # Sort again
+    res = []
+    for node in nx.topological_sort(graph_copy):
+        if isinstance(node, int):
+            res += sorted(idx_node[node])
+        else:
+            res.append(node)
+    return res
+
+
+def _least_common_ancestor(
+    left_pred: list["Node"], right_pred: list["Node"], graph: "nx.DiGraph[Node]"
+):
+    # Record left node's ancestors
+    all_left_pred: set[str] = set()
+    worklist = list(left_pred)
+    while worklist:
+        cnt = len(worklist)
+        for curr_node in worklist:
+            curr_pred = list(graph.predecessors(curr_node))
+            if all_left_pred.union(curr_pred):
+                # Found loop...
+                break
+            all_left_pred.intersection(curr_pred)
+            worklist += list(curr_pred)
+        worklist = worklist[cnt:]
+    # Find right node's ancestors, if ancestor in match record, return it
+    worklist = list(right_pred)
+    while worklist:
+        cnt = len(worklist)
+        for curr_node in worklist:
+            curr_pred = list(graph.predecessors(curr_node))
+            if all_left_pred.union(curr_pred):
+                return curr_pred
+            worklist += list(curr_pred)
+        worklist = worklist[cnt:]
+
+
+def match_acyclic_if_else(node: Node, graph: "nx.DiGraph[Node]"):
+    if node not in graph:
+        return
+    succs = list(graph.successors(node))
+    if len(succs) != 2:
+        return
+    left, right = succs
+    if left.label > right.label:
+        left, right = right, left
+    left_succs = list(graph.successors(left))
+    right_succs = list(graph.successors(right))
+    left_pred = list(graph.predecessors(left))
+    right_pred = list(graph.predecessors(right))
+    if (
+        len(left_succs) == 1
+        and left_succs == right_succs
+        and len(left_pred) == 1
+        and len(right_pred) == 1
+    ):
+        # match: if cond: ... else: ...
+        # Rearrange graph for further matching
+        # remove sucessor, connect node and sucessor's sucessor
+        graph.remove_node(left)
+        graph.remove_node(right)
+        cg = IfElseNode(node.label, node, left, else_=right)
+        for pred in graph.predecessors(node):
+            graph.add_edge(pred, cg)
+        graph.add_edge(cg, left_succs[0])
+        graph.remove_node(node)
+        return cg
+    if [left] == right_succs or [right] == left_succs:
+        # match: if cond: ...
+        if [left] == right_succs:
+            graph.remove_node(right)
+            cg = IfElseNode(node.label, node, right, None)
+        else:
+            graph.remove_node(left)
+            cg = IfElseNode(node.label, node, left, None)
+        for pred in graph.predecessors(node):
+            graph.add_edge(pred, cg)
+        for succ in succs:
+            graph.add_edge(cg, succ)
+        graph.remove_node(node)
+        return cg
+    if (
+        len(left_succs) == 1
+        and left_succs == right_succs
+        and (len(left_pred) > 1 or len(right_pred) > 1)
+    ):
+        # Match if cond1 and cond2 ...:
+        # This condition has same predecessor
+        # but left predecessor and right predecessor have different ancestors
+        common = _least_common_ancestor(left_pred, right_pred, graph)
+        if common and len(common) == 1:
+            cond = common[0]
+            cond_end = left_succs[0]
+            if_nodes = [cond]
+            # Remove node between condition node and condition end node
+            # Assume these node is in the same condition
+            for curr_node in sorted(graph.nodes, key=lambda n: n.label):
+                if int(curr_node.label) > int(cond.label) and int(
+                    curr_node.label
+                ) < int(cond_end.label):
+                    graph.remove_node(curr_node)
+                    if_nodes.append(curr_node)
+            cg = IfElseMultipleNode(cond.label, tuple(if_nodes), left, right)
+            for pred in graph.predecessors(cond):
+                graph.add_edge(pred, cg)
+            graph.add_edge(cg, cond_end)
+            graph.remove_node(cond)
+            return cg
+    return
+
+
+def match_cyclic_while(node, graph):
+    loop_dic = havlak(node, graph)
+    return loop_dic
+
+
+def parse_block_stack(insts: DecompLines):
+    stack: list[str] = []
+    lines: list[str] = []
+    for linenum, inst in insts:
+        if inst.op == "LOAD_ATTR":
+            obj = stack.pop()
+            stack.append(f"{obj}.{inst.args}")
+        elif inst.op.startswith("LOAD_"):
+            stack.append(inst.args)
+        elif inst.op.startswith("STORE_"):
+            value = stack.pop()
+            lines.append(f"{inst.args} = {value}")
+        elif inst.op == "BINARY_OP" or inst.op == "COMPARE_OP":
+            v1, v2 = stack.pop(), stack.pop()
+            stack.append(f"{v2} {inst.args} {v1}")
+        elif inst.op == "BINARY_SUBSCR":
+            v1, v2 = stack.pop(), stack.pop()
+            stack.append(f"{v2}[{v1}]")
+        elif inst.op == "CALL":
+            func = stack[0]
+            call_args = ", ".join(stack[1:])
+            val = f"{func}({call_args})"
+            stack = [val]
+        elif inst.op == "POP_JUMP_FORWARD_IF_FALSE":
+            cond = stack.pop()
+            lines.append(f"if {cond}:  # goto {inst.args}")
+        elif inst.op == "POP_JUMP_BACKWARD_IF_TRUE":
+            cond = stack.pop()
+            lines.append(f"if {cond}:\nbreak  # goto {inst.args}")
+        elif inst.op == "RETURN_VALUE":
+            ret = stack.pop()
+            lines.append(f"return {ret}  # goto {inst.args}")
+        elif inst.op == "POP_TOP":
+            stack.pop()
+    if stack:
+        lines += stack
+    return lines
+
+
+def draw_graph(g: nx.DiGraph, filename: str):
+    import matplotlib.pyplot
+    from networkx.drawing.nx_pydot import graphviz_layout
+
+    graph_labeled = nx.DiGraph()
+    graph_labeled.add_edges_from([(f.label, t.label) for f, t in g.edges])
+    pos = graphviz_layout(graph_labeled, prog="dot")
+    nx.draw(graph_labeled, pos, with_labels=True)
+    matplotlib.pyplot.savefig(filename)
+
+
+if __name__ == "__main__":
+    from sys import argv
+
+    argv.append("test_prog/if_branch_2.txt")
+    with open(argv[1]) as fr:
+        raw = fr.read()
+    insts = parse_dis_output(raw)
+    graph = split_block_sep(insts)
+    if len(argv) > 2:
+        draw_graph(graph, argv[1].replace(".txt", ".jpg"))
+    head = next(i for i in graph.nodes if i.label == "0")
+    nodes = [head] + list(i[1] for i in nx.bfs_edges(graph, head))
+    # nodes = topological_sort(graph)
+    print("-- Find acyclic pattern")
+    node = None
+    for node in reversed(nodes):
+        res = match_acyclic_if_else(node, graph)
+        print(node.label, res)
+    if not node:
+        exit()
+    print("-- Find cyclic pattern")
+    if node not in graph:
+        # First node might be merged and cannot found in graph
+        # So we find it in new graph
+        if label_node_ := [i for i in graph.nodes if i.label == node.label]:
+            node = label_node_[0]
+    res = match_cyclic_while(node, graph)
+    for node, loop_node in res.items():
+        print("-- Loop", node.label, [i.label for i in loop_node])
+        if not loop_node:
+            continue
+        # Condition is on the last node
+        while_loop = WhileLoopNode(node.label, loop_node[0], node)
+        print(while_loop)
