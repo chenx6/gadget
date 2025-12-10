@@ -1,5 +1,6 @@
 from subprocess import run, DEVNULL
 from argparse import ArgumentParser
+from pathlib import Path
 
 
 def gen_thumb(file: str, second: int | float = 30, duration: str = "05:00"):
@@ -8,6 +9,8 @@ def gen_thumb(file: str, second: int | float = 30, duration: str = "05:00"):
     https://www.cnblogs.com/architectforest/p/17060422.html
     """
     name = file.split("/")[-1]
+    if Path(name).exists():
+        return
     p = run(
         [
             "ffmpeg",
@@ -16,7 +19,7 @@ def gen_thumb(file: str, second: int | float = 30, duration: str = "05:00"):
             "-i",
             file,
             "-r",
-            f"{1/second:.02f}",
+            f"{1 / second:.02f}",
             "-t",
             duration,
             "-f",
@@ -30,7 +33,7 @@ def gen_thumb(file: str, second: int | float = 30, duration: str = "05:00"):
     if retcode != 0:
         print(f"ffmpeg convert failed, {retcode}")
         return retcode
-    run(f"convert -append output*.jpg '{name}'.jpg", shell=True)
+    run(f"magick convert -append output*.jpg '{name}'.jpg", shell=True)
     run("rm output*.jpg", shell=True)
     print(f"{name} => {name}.jpg")
 
