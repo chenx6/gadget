@@ -212,12 +212,15 @@ class HexViewerView:
     def _render_impl(self):
         self.stdscr.clear()
         data = self.vm.data
+        # Render header
         self.stdscr.addstr(0, 0, self.HEADER)
         for idx, i in enumerate(range(0, len(data), 16), 1):
+            # Render line
             line_data = data[i : i + 16]
             addr_offset = self.vm.line_offset.value * 16 + i
 
             col = 0
+            # Line layout: [address] [hex value] [char value]
             addr = f"{addr_offset:08x} "
             self.stdscr.addstr(idx, col, addr)
             col += len(addr)
@@ -233,6 +236,7 @@ class HexViewerView:
                 color = get_color(h)
                 self.stdscr.addstr(idx, col, char_text, color_pair(color))
                 col += len(char_text)
+        # Render command
         if self.vm.mode.value in (Mode.Goto, Mode.Search):
             self.stdscr.move(self.vm.height + 1, 0)
             self.stdscr.addstr(self.vm.cmd_buf.value)
@@ -249,6 +253,7 @@ class HexViewerView:
 
 
 def main(file_path: str, stdscr: window):
+    # Use MVVM architecture, Model <=> ViewModel <=> View
     height, width = stdscr.getmaxyx()
     vm = HexViewerViewModel(file_path, height)
     view = HexViewerView(stdscr, vm)  # noqa: F841
