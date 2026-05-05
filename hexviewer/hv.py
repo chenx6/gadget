@@ -20,13 +20,7 @@ from curses import (
 )
 from enum import IntEnum
 from io import BufferedReader
-from logging import getLogger, FileHandler, DEBUG
-
-logger = getLogger("hv")
-logger.setLevel(DEBUG)
-handler = FileHandler("hv.log")
-handler.setLevel(DEBUG)
-logger.addHandler(handler)
+from logging import getLogger, FileHandler, DEBUG, INFO
 
 
 class Color(IntEnum):
@@ -47,6 +41,17 @@ class ProgramStatus(IntEnum):
     Exit = 1
     ShowCursor = 2
     HideCursor = 3
+
+
+def get_logger(debug: bool = False):
+    level = DEBUG if debug else INFO
+    logger = getLogger("hv")
+    logger.setLevel(level)
+    if debug:
+        handler = FileHandler("hv.log")
+        handler.setLevel(level)
+        logger.addHandler(handler)
+    return logger
 
 
 def get_color(ch: int) -> Color:
@@ -246,12 +251,13 @@ class HexViewerView:
 def main(file_path: str, stdscr: window):
     height, width = stdscr.getmaxyx()
     vm = HexViewerViewModel(file_path, height)
-    view = HexViewerView(stdscr, vm)
+    view = HexViewerView(stdscr, vm)  # noqa: F841
     while True:
         key = stdscr.getch()
         vm.handle_key(key)
 
 
+logger = get_logger()
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("file")
