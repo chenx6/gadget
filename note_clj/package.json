@@ -1,0 +1,20 @@
+{
+  "name": "note_clj",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "squint": "squint",
+    "build": "squint compile && vite build"
+  },
+  "dependencies": {
+    "squint-cljs": "^0.14.207"
+  },
+  "devDependencies": {
+    "vite": "^8.2.1"
+  }
+}
