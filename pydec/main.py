@@ -224,16 +224,16 @@ def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
     if [left] == right_succs or [right] == left_succs:
         # match: if cond: ...
         if [left] == right_succs:
-            graph.remove_node(right)
-            cg = IfElseNode(node.label, node, right, None)
+            body =  right
+            join = left
         else:
-            graph.remove_node(left)
-            cg = IfElseNode(node.label, node, left, None)
-        for pred in graph.predecessors(node):
-            graph.add_edge(pred, cg)
-        for succ in succs:
-            graph.add_edge(cg, succ)
-        graph.remove_node(node)
+            body = left
+            join = right
+        cg = IfElseNode(node.label, node, body, None)
+        preds = list(graph.predecessors(node))
+        graph.remove_nodes_from((node, body))
+        graph.add_edges_from((pred, cg) for pred in preds)
+        graph.add_edge(cg, join)
         return cg
     if (
         len(left_succs) == 1
