@@ -1,23 +1,28 @@
+from argparse import ArgumentParser, Namespace
 from collections import defaultdict
-from collections.abc import Iterable
-from re import compile as re_compile, sub
+from collections.abc import Iterable, Sequence
+from logging import DEBUG, WARNING, basicConfig, getLogger
+from re import compile as re_compile
+from re import sub
 from typing import TYPE_CHECKING
 
 import networkx as nx
 
+from havlak import havlak
 from model import (
-    IfElseMultipleNode,
-    Instruction,
+    Block,
     DecompLine,
     DecompLines,
-    Block,
     GraphFromTo,
+    IfElseMultipleNode,
     IfElseNode,
+    Instruction,
     ParsedBlock,
     SequenceNode,
     WhileLoopNode,
 )
-from havlak import havlak
+
+logger = getLogger(__name__)
 
 if TYPE_CHECKING:
     from model import Node
@@ -336,7 +341,9 @@ def ast_to_python(node: "Node", indent: int = 0) -> str:
         lines.append(body or " " * (indent + 4) + "pass")
         if node.else_ is not None:
             lines.append(f"{prefix}else:")
-            lines.append(ast_to_python(node.else_, indent + 4) or " " * (indent + 4) + "pass")
+            lines.append(
+                ast_to_python(node.else_, indent + 4) or " " * (indent + 4) + "pass"
+            )
         return "\n".join(lines)
     if isinstance(node, IfElseMultipleNode):
         before: list[str] = []
@@ -356,7 +363,9 @@ def ast_to_python(node: "Node", indent: int = 0) -> str:
         lines = [*(prefix + line for line in before), f"{prefix}if {condition}:"]
         lines.append(ast_to_python(node.if_, indent + 4) or " " * (indent + 4) + "pass")
         lines.append(f"{prefix}else:")
-        lines.append(ast_to_python(node.else_, indent + 4) or " " * (indent + 4) + "pass")
+        lines.append(
+            ast_to_python(node.else_, indent + 4) or " " * (indent + 4) + "pass"
+        )
         return "\n".join(lines)
     if isinstance(node, WhileLoopNode):
         if not isinstance(node.cond, Block):
@@ -367,7 +376,9 @@ def ast_to_python(node: "Node", indent: int = 0) -> str:
             *(prefix + line for line in parsed.lines),
             f"{prefix}while {condition}:",
         ]
-        lines.append(ast_to_python(node.body, indent + 4) or " " * (indent + 4) + "pass")
+        lines.append(
+            ast_to_python(node.body, indent + 4) or " " * (indent + 4) + "pass"
+        )
         return "\n".join(lines)
     raise TypeError(f"unsupported AST node: {type(node).__name__}")
 
@@ -398,23 +409,38 @@ def draw_graph(g: nx.DiGraph, filename: str):
     matplotlib.pyplot.savefig(filename)
 
 
-if __name__ == "__main__":
-    from sys import argv
+def parse_args(argv: Sequence[str] | None = None) -> Namespace:
+    parser = ArgumentParser()
+    parser.add_argument("input")
+    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--draw-graph", action="store_true")
+    return parser.parse_args(argv)
 
-    with open(argv[1]) as fr:
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
+    basicConfig(
+        level=DEBUG if args.verbose else WARNING,
+        format="%(message)s",
+    )
+
+    with open(args.input) as fr:
         raw = fr.read()
     insts = parse_dis_output(raw)
     graph = split_block_sep(insts)
-    if len(argv) > 2:
-        draw_graph(graph, argv[1].replace(".txt", ".jpg"))
+    if args.draw_graph:
+        draw_graph(graph, args.input.replace(".txt", ".jpg"))
     head = next(i for i in graph.nodes if i.label == "0")
     nodes = [head] + list(i[1] for i in nx.bfs_edges(graph, head))
     # nodes = topological_sort(graph)
+    logger.debug("-- Find acyclic pattern")
     node = None
     for node in reversed(nodes):
-        match_acyclic_if_else(node, graph)
+        result = match_acyclic_if_else(node, graph)
+        logger.debug("%s %s", node.label, result)
     if not node:
-        exit()
+        return
+    logger.debug("-- Find cyclic pattern")
     if node not in graph:
         # First node might be merged and cannot found in graph
         # So we find it in new graph
@@ -422,10 +448,16 @@ if __name__ == "__main__":
             node = label_node_[0]
     res = match_cyclic_while(node, graph)
     for node, loop_node in res.items():
+        logger.debug("-- Loop %s %s", node.label, [i.label for i in loop_node])
         if not loop_node:
             continue
         # Condition is on the last node
         while_loop = WhileLoopNode(node.label, loop_node[0], node)
+        logger.debug("%s", while_loop)
 
     head = next(i for i in graph.nodes if i.label == "0")
     print(ast_to_python(graph_to_ast(graph, head)))
+
+
+if __name__ == "__main__":
+    main()
