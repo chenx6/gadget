@@ -191,6 +191,20 @@ def _least_common_ancestor(
         worklist = worklist[cnt:]
 
 
+def replace_region(
+    graph: "nx.DiGraph[Node]",
+    entry: "Node",
+    members: Iterable["Node"],
+    replacement: "Node",
+    exit_node: "Node",
+) -> None:
+    """Replace a single-entry region with a structured node."""
+    predecessors = list(graph.predecessors(entry))
+    graph.remove_nodes_from((entry, *members))
+    graph.add_edges_from((pred, replacement) for pred in predecessors)
+    graph.add_edge(replacement, exit_node)
+
+
 def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
     if node not in graph:
         return
@@ -211,29 +225,17 @@ def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
         and len(right_pred) == 1
     ):
         # match: if cond: ... else: ...
-        # Rearrange graph for further matching
-        # remove sucessor, connect node and sucessor's sucessor
-        graph.remove_node(left)
-        graph.remove_node(right)
         cg = IfElseNode(node.label, node, left, else_=right)
-        for pred in graph.predecessors(node):
-            graph.add_edge(pred, cg)
-        graph.add_edge(cg, left_succs[0])
-        graph.remove_node(node)
+        replace_region(graph, node, (left, right), cg, left_succs[0])
         return cg
     if [left] == right_succs or [right] == left_succs:
         # match: if cond: ...
         if [left] == right_succs:
-            body =  right
-            join = left
+            body, join = right, left
         else:
-            body = left
-            join = right
+            body, join = left, right
         cg = IfElseNode(node.label, node, body, None)
-        preds = list(graph.predecessors(node))
-        graph.remove_nodes_from((node, body))
-        graph.add_edges_from((pred, cg) for pred in preds)
-        graph.add_edge(cg, join)
+        replace_region(graph, node, (body,), cg, join)
         return cg
     if (
         len(left_succs) == 1
@@ -247,20 +249,17 @@ def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
         if common and len(common) == 1:
             cond = common[0]
             cond_end = left_succs[0]
-            if_nodes = [cond]
-            # Remove node between condition node and condition end node
-            # Assume these node is in the same condition
+            region_nodes = []
+            # Collect nodes between the condition and its exit.
+            # Assume these nodes belong to the same condition.
             for curr_node in sorted(graph.nodes, key=lambda n: n.label):
                 if int(curr_node.label) > int(cond.label) and int(
                     curr_node.label
                 ) < int(cond_end.label):
-                    graph.remove_node(curr_node)
-                    if_nodes.append(curr_node)
-            cg = IfElseMultipleNode(cond.label, tuple(if_nodes), left, right)
-            for pred in graph.predecessors(cond):
-                graph.add_edge(pred, cg)
-            graph.add_edge(cg, cond_end)
-            graph.remove_node(cond)
+                    region_nodes.append(curr_node)
+            if_nodes = (cond, *region_nodes)
+            cg = IfElseMultipleNode(cond.label, if_nodes, left, right)
+            replace_region(graph, cond, region_nodes, cg, cond_end)
             return cg
     return
 
