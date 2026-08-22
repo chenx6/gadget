@@ -12,6 +12,11 @@ class DecompLine(NamedTuple):
     inst: Instruction
 
 
+class ParsedBlock(NamedTuple):
+    lines: list[str]
+    condition: str | None
+
+
 @dataclass(frozen=True, order=True)
 class Node:
     label: str
@@ -40,6 +45,13 @@ class IfElseMultipleNode(Node):
 class WhileLoopNode(Node):
     cond: Node
     body: Node
+
+
+@dataclass(frozen=True)
+class SequenceNode(Node):
+    """A sequence of structured nodes, in source-code order."""
+
+    nodes: tuple[Node, ...]
 
 
 GraphFromTo = tuple[str, str]

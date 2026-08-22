@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Iterable
 from re import compile as re_compile, sub
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,8 @@ from model import (
     Block,
     GraphFromTo,
     IfElseNode,
+    ParsedBlock,
+    SequenceNode,
     WhileLoopNode,
 )
 from havlak import havlak
@@ -183,7 +186,7 @@ def _least_common_ancestor(
         worklist = worklist[cnt:]
 
 
-def match_acyclic_if_else(node: Node, graph: "nx.DiGraph[Node]"):
+def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
     if node not in graph:
         return
     succs = list(graph.successors(node))
@@ -262,43 +265,126 @@ def match_cyclic_while(node, graph):
     return loop_dic
 
 
-def parse_block_stack(insts: DecompLines):
+def parse_block_stack(insts: Iterable[DecompLine]) -> ParsedBlock:
+    """Decompile a basic block into statements and an optional condition."""
     stack: list[str] = []
     lines: list[str] = []
-    for linenum, inst in insts:
-        if inst.op == "LOAD_ATTR":
-            obj = stack.pop()
-            stack.append(f"{obj}.{inst.args}")
-        elif inst.op.startswith("LOAD_"):
-            stack.append(inst.args)
-        elif inst.op.startswith("STORE_"):
-            value = stack.pop()
-            lines.append(f"{inst.args} = {value}")
-        elif inst.op == "BINARY_OP" or inst.op == "COMPARE_OP":
-            v1, v2 = stack.pop(), stack.pop()
-            stack.append(f"{v2} {inst.args} {v1}")
-        elif inst.op == "BINARY_SUBSCR":
-            v1, v2 = stack.pop(), stack.pop()
-            stack.append(f"{v2}[{v1}]")
-        elif inst.op == "CALL":
-            func = stack[0]
-            call_args = ", ".join(stack[1:])
-            val = f"{func}({call_args})"
-            stack = [val]
-        elif inst.op == "POP_JUMP_FORWARD_IF_FALSE":
-            cond = stack.pop()
-            lines.append(f"if {cond}:  # goto {inst.args}")
-        elif inst.op == "POP_JUMP_BACKWARD_IF_TRUE":
-            cond = stack.pop()
-            lines.append(f"if {cond}:\nbreak  # goto {inst.args}")
-        elif inst.op == "RETURN_VALUE":
-            ret = stack.pop()
-            lines.append(f"return {ret}  # goto {inst.args}")
-        elif inst.op == "POP_TOP":
-            stack.pop()
-    if stack:
-        lines += stack
-    return lines
+    condition_expr: str | None = None
+
+    for _, inst in insts:
+        op, arg = inst.op, inst.args
+        if op in {"RESUME", "CACHE", "NOP", "PRECALL", "GET_ITER"}:
+            continue
+        if op == "PUSH_NULL":
+            continue
+        if op == "LOAD_ATTR":
+            stack.append(f"{stack.pop()}.{arg}")
+        elif op.startswith("LOAD_"):
+            # LOAD_GLOBAL may be displayed as ``NULL + print`` by dis.
+            stack.append(arg.removeprefix("NULL + "))
+        elif op.startswith("STORE_"):
+            lines.append(f"{arg} = {stack.pop()}")
+        elif op in {"BINARY_OP", "COMPARE_OP"}:
+            right, left = stack.pop(), stack.pop()
+            stack.append(f"{left} {arg} {right}")
+        elif op == "BINARY_SUBSCR":
+            index, value = stack.pop(), stack.pop()
+            stack.append(f"{value}[{index}]")
+        elif op == "CALL":
+            argc = int(arg) if arg.isdigit() else max(0, len(stack) - 1)
+            args = stack[-argc:] if argc else []
+            if argc:
+                del stack[-argc:]
+            func = stack.pop()
+            stack.append(f"{func}({', '.join(args)})")
+        elif op == "POP_TOP" and stack:
+            lines.append(stack.pop())
+        elif op.startswith("POP_JUMP"):
+            if stack:
+                condition_expr = stack.pop()
+            if condition_expr is not None and op.endswith("IF_TRUE"):
+                condition_expr = f"not ({condition_expr})"
+        elif op == "RETURN_VALUE":
+            value = stack.pop() if stack else "None"
+            lines.append(f"return {value}")
+
+    lines.extend(stack)
+    return ParsedBlock(lines, condition_expr)
+
+
+def ast_to_python(node: "Node", indent: int = 0) -> str:
+    """Convert the decompiler's structured AST into readable Python source."""
+    prefix = " " * indent
+
+    if isinstance(node, Block):
+        parsed = parse_block_stack(node.insts)
+        return "\n".join(prefix + line for line in parsed.lines)
+    if isinstance(node, SequenceNode):
+        return "\n".join(
+            source for child in node.nodes if (source := ast_to_python(child, indent))
+        )
+    if isinstance(node, IfElseNode):
+        if not isinstance(node.cond, Block):
+            raise TypeError("an if condition must currently be a basic block")
+        parsed = parse_block_stack(node.cond.insts)
+        condition = parsed.condition or "True"
+        lines = [
+            *(prefix + line for line in parsed.lines),
+            f"{prefix}if {condition}:",
+        ]
+        body = ast_to_python(node.if_, indent + 4) if node.if_ else ""
+        lines.append(body or " " * (indent + 4) + "pass")
+        if node.else_ is not None:
+            lines.append(f"{prefix}else:")
+            lines.append(ast_to_python(node.else_, indent + 4) or " " * (indent + 4) + "pass")
+        return "\n".join(lines)
+    if isinstance(node, IfElseMultipleNode):
+        before: list[str] = []
+        expressions: list[str] = []
+        operators: list[str] = []
+        for condition_node in node.cond:
+            if not isinstance(condition_node, Block):
+                raise TypeError("a compound condition must contain basic blocks")
+            parsed = parse_block_stack(condition_node.insts)
+            before.extend(parsed.lines)
+            expressions.append(parsed.condition or "True")
+            jump = condition_node.insts[-1].inst.op if condition_node.insts else ""
+            operators.append("or" if jump.endswith("IF_TRUE") else "and")
+        condition = expressions[0] if expressions else "True"
+        for operator, expression in zip(operators, expressions[1:]):
+            condition = f"{condition} {operator} {expression}"
+        lines = [*(prefix + line for line in before), f"{prefix}if {condition}:"]
+        lines.append(ast_to_python(node.if_, indent + 4) or " " * (indent + 4) + "pass")
+        lines.append(f"{prefix}else:")
+        lines.append(ast_to_python(node.else_, indent + 4) or " " * (indent + 4) + "pass")
+        return "\n".join(lines)
+    if isinstance(node, WhileLoopNode):
+        if not isinstance(node.cond, Block):
+            raise TypeError("a while condition must currently be a basic block")
+        parsed = parse_block_stack(node.cond.insts)
+        condition = parsed.condition or "True"
+        lines = [
+            *(prefix + line for line in parsed.lines),
+            f"{prefix}while {condition}:",
+        ]
+        lines.append(ast_to_python(node.body, indent + 4) or " " * (indent + 4) + "pass")
+        return "\n".join(lines)
+    raise TypeError(f"unsupported AST node: {type(node).__name__}")
+
+
+def graph_to_ast(graph: "nx.DiGraph[Node]", head: "Node") -> SequenceNode:
+    """Turn a reduced, linear structured graph into a sequence AST."""
+    nodes: list[Node] = []
+    seen: set[Node] = set()
+    current: Node | None = head
+    while current is not None and current not in seen:
+        seen.add(current)
+        nodes.append(current)
+        successors = list(graph.successors(current))
+        if len(successors) > 1:
+            raise ValueError("graph still contains unstructured branches")
+        current = successors[0] if successors else None
+    return SequenceNode(head.label, tuple(nodes))
 
 
 def draw_graph(g: nx.DiGraph, filename: str):
@@ -315,7 +401,6 @@ def draw_graph(g: nx.DiGraph, filename: str):
 if __name__ == "__main__":
     from sys import argv
 
-    argv.append("test_prog/if_branch_2.txt")
     with open(argv[1]) as fr:
         raw = fr.read()
     insts = parse_dis_output(raw)
@@ -325,14 +410,11 @@ if __name__ == "__main__":
     head = next(i for i in graph.nodes if i.label == "0")
     nodes = [head] + list(i[1] for i in nx.bfs_edges(graph, head))
     # nodes = topological_sort(graph)
-    print("-- Find acyclic pattern")
     node = None
     for node in reversed(nodes):
-        res = match_acyclic_if_else(node, graph)
-        print(node.label, res)
+        match_acyclic_if_else(node, graph)
     if not node:
         exit()
-    print("-- Find cyclic pattern")
     if node not in graph:
         # First node might be merged and cannot found in graph
         # So we find it in new graph
@@ -340,9 +422,10 @@ if __name__ == "__main__":
             node = label_node_[0]
     res = match_cyclic_while(node, graph)
     for node, loop_node in res.items():
-        print("-- Loop", node.label, [i.label for i in loop_node])
         if not loop_node:
             continue
         # Condition is on the last node
         while_loop = WhileLoopNode(node.label, loop_node[0], node)
-        print(while_loop)
+
+    head = next(i for i in graph.nodes if i.label == "0")
+    print(ast_to_python(graph_to_ast(graph, head)))
