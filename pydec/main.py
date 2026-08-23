@@ -115,9 +115,9 @@ def split_block_sep(insts: DecompLines):
             for from_, to in false_judge:
                 from_to.append((next_block.label, to))
     # Map blocks to Graph
-    graph: "nx.DiGraph[Node]" = nx.DiGraph()
+    graph: nx.DiGraph[Node] = nx.DiGraph()
     graph.add_nodes_from(blocks)
-    block_dic = dict((i.label, i) for i in blocks)
+    block_dic = {i.label: i for i in blocks}
     block_dic["1919810"] = Block("1919810", ())
     for from_, to in from_to:
         if not to:
@@ -430,7 +430,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.draw_graph:
         draw_graph(graph, args.input.replace(".txt", ".jpg"))
     head = next(i for i in graph.nodes if i.label == "0")
-    nodes = [head] + list(i[1] for i in nx.bfs_edges(graph, head))
+    nodes = [head] + [i[1] for i in nx.bfs_edges(graph, head)]
     # nodes = topological_sort(graph)
     logger.debug("-- Find acyclic pattern")
     node = None
@@ -440,11 +440,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     if not node:
         return
     logger.debug("-- Find cyclic pattern")
-    if node not in graph:
+    if node not in graph and (
+        label_node_ := [i for i in graph.nodes if i.label == node.label]
+    ):
         # First node might be merged and cannot found in graph
         # So we find it in new graph
-        if label_node_ := [i for i in graph.nodes if i.label == node.label]:
-            node = label_node_[0]
+        node = label_node_[0]
     res = match_cyclic_while(node, graph)
     for node, loop_node in res.items():
         logger.debug("-- Loop %s %s", node.label, [i.label for i in loop_node])
