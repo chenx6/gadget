@@ -54,5 +54,9 @@ class SequenceNode(Node):
     nodes: tuple[Node, ...]
 
 
+@dataclass(frozen=True)
+class ExitNode(Node): ...
+
+
 GraphFromTo = tuple[str, str]
 DecompLines = list[DecompLine]

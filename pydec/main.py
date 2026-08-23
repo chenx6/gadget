@@ -20,6 +20,7 @@ from model import (
     ParsedBlock,
     SequenceNode,
     WhileLoopNode,
+    ExitNode,
 )
 
 logger = getLogger(__name__)
@@ -118,11 +119,12 @@ def split_block_sep(insts: DecompLines):
     graph: nx.DiGraph[Node] = nx.DiGraph()
     graph.add_nodes_from(blocks)
     block_dic = {i.label: i for i in blocks}
-    block_dic["1919810"] = Block("1919810", ())
     for from_, to in from_to:
         if not to:
-            to = "1919810"
-        graph.add_edge(block_dic[from_], block_dic[to])
+            to_block = ExitNode("1919810")
+        else:
+            to_block = block_dic[to]
+        graph.add_edge(block_dic[from_], to_block)
     return graph
 
 
@@ -350,7 +352,7 @@ def ast_to_python(node: "Node", indent: int = 0) -> str:
         operators: list[str] = []
         for condition_node in node.cond:
             if not isinstance(condition_node, Block):
-                raise TypeError("a compound condition must contain basic blocks")
+                raise TypeError("a compound condition must contain basic blocks, got %s", condition_node)
             parsed = parse_block_stack(condition_node.insts)
             before.extend(parsed.lines)
             expressions.append(parsed.condition or "True")
@@ -379,6 +381,8 @@ def ast_to_python(node: "Node", indent: int = 0) -> str:
             ast_to_python(node.body, indent + 4) or " " * (indent + 4) + "pass"
         )
         return "\n".join(lines)
+    if isinstance(node, ExitNode):
+        return ""
     raise TypeError(f"unsupported AST node: {type(node).__name__}")
 
 
