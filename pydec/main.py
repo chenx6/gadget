@@ -11,9 +11,7 @@ import networkx as nx
 from havlak import havlak
 from model import (
     Block,
-    DecompLine,
-    DecompLines,
-    GraphFromTo,
+    EdgeType,
     IfElseMultipleNode,
     IfElseNode,
     Instruction,
@@ -30,13 +28,13 @@ if TYPE_CHECKING:
 
 
 def parse_pycdas_output(output: str):
-    insts: DecompLines = []
+    insts = []
     for line in output.split("\n"):
         toks = [tok.strip() for tok in line.split("  ") if tok]
         match len(toks):
             case 2:
                 linenum, op = toks
-                args = ""
+                args = None
             case 3:
                 linenum, op, mem = toks
                 args = mem.split(": ")[-1]
@@ -44,87 +42,72 @@ def parse_pycdas_output(output: str):
                     args = sub(r".+ \((.+)\)", "\\1", args)
             case _:
                 continue
-        insts.append(DecompLine(int(linenum), Instruction(op, args)))
+        insts.append(Instruction(int(linenum), op, args))
     return insts
 
 
 def parse_dis_output(output: str):
     #  53     >>  184 LOAD_FAST                0 (l)
     tokenizer = re_compile(r"(\d+) ([\w_]+)[ ]*(\d+)*[ ]*(\(.+\))*")
-    insts: DecompLines = []
+    insts = []
     for line in output.split("\n"):
         m = tokenizer.search(line)
         if m:
             toks = m.groups()
             linenum, op, arg, argp = toks
             if argp:
-                argp = argp.removeprefix("(").removesuffix(")")
+                argp = argp.removeprefix("(").removesuffix(")").removeprefix("to ")
             else:
                 argp = ""
-            insts.append(DecompLine(int(linenum), Instruction(op, argp)))
+            insts.append(Instruction(int(linenum), op, argp))
     return insts
 
 
-def split_block_sep(insts: DecompLines):
-    COND_JUMP = [
+def split_block_sep(insts: list[Instruction]):
+    COND_JUMPS = [
         "POP_JUMP_FORWARD_IF_FALSE",
         "POP_JUMP_BACKWARD_IF_TRUE",
         "POP_JUMP_FORWARD_IF_TRUE",
     ]
-    TERMINATOR = [
+    UNCOND_JUMPS = [
         "JUMP_FORWARD",
         "JUMP_BACKWARD",
-        "RETURN_VALUE",
-    ] + COND_JUMP
+    ]
+    JUMPS = COND_JUMPS + UNCOND_JUMPS
+    # Collect leader and split blocks
+    leaders = {insts[0].offset}
+    for index, inst in enumerate(insts):
+        if inst.op in JUMPS and inst.args:
+            leaders.add(int(inst.args))
+        if inst.op in COND_JUMPS:
+            leaders.add(insts[index + 1].offset)
     blocks: list[Block] = []
-    from_to: list[GraphFromTo] = []
-    curr_insts: DecompLines = []
-    # Collect relation between instructions
-    for linenum, inst in insts:
-        curr_insts.append(DecompLine(linenum, inst))
-        curr_block_label = str(curr_insts[0].linenum)
-        if inst.op in TERMINATOR:
-            if inst.op in COND_JUMP:
-                # Connect if block
-                from_to.append((curr_block_label, str(linenum + 2)))
-            from_to.append((curr_block_label, inst.args.replace("to ", "")))
-            curr_insts = []
-        elif inst.op == "FOR_ITER":
-            from_to.append((str(linenum), inst.args.replace("to ", "")))
-            curr_insts = [DecompLine(linenum, inst)]
-    # Split by relation
-    curr_insts = []
-    splitor = set([i[0] for i in from_to] + [i[1] for i in from_to])
-    for linenum, inst in insts:
-        curr_insts.append(DecompLine(linenum, inst))
-        if linenum != 0 and str(linenum) in splitor:
-            curr_block_label = str(curr_insts[0].linenum)
-            end_inst = curr_insts.pop()
-            blocks.append(Block(curr_block_label, tuple(curr_insts)))
-            curr_insts = [end_inst]
-    if curr_insts:
-        blocks.append(Block(str(curr_insts[0].linenum), tuple(curr_insts)))
-    # If end of a block is not terminator, connect it to next block
-    for idx in range(len(blocks)):
-        curr_block = blocks[idx]
-        if curr_block.insts[-1].inst.op not in TERMINATOR:
-            # Fix false judgement when block is not ends with TERMINATOR
-            false_judge = [i for i in from_to if i[0] == curr_block.label]
-            from_to = [i for i in from_to if i[0] != curr_block.label]
-            next_block = blocks[idx + 1]
-            from_to.append((curr_block.label, next_block.label))
-            for from_, to in false_judge:
-                from_to.append((next_block.label, to))
-    # Map blocks to Graph
+    curr_block_insts: list[Instruction] = []
+    for inst in insts:
+        if inst.offset in leaders and curr_block_insts:
+            blocks.append(Block(curr_block_insts[0].offset, tuple(curr_block_insts)))
+            curr_block_insts = []
+        curr_block_insts.append(inst)
+    if curr_block_insts:
+        blocks.append(Block(curr_block_insts[0].offset, tuple(curr_block_insts)))
+    # Construct CFG
+    label_to_block = {i.label: i for i in blocks}
     graph: nx.DiGraph[Node] = nx.DiGraph()
-    graph.add_nodes_from(blocks)
-    block_dic = {i.label: i for i in blocks}
-    for from_, to in from_to:
-        if not to:
-            to_block = ExitNode("1919810")
-        else:
-            to_block = block_dic[to]
-        graph.add_edge(block_dic[from_], to_block)
+    logger.debug("labels: %s", label_to_block.keys())
+    for index, block in enumerate(blocks):
+        tail_inst = block.insts[-1]
+        if tail_inst.op in UNCOND_JUMPS and tail_inst.args:
+            graph.add_edge(
+                block, label_to_block[int(tail_inst.args)], type_=EdgeType.Jump
+            )
+        elif tail_inst.op in COND_JUMPS and tail_inst.args:
+            graph.add_edge(
+                block, label_to_block[int(tail_inst.args)], type_=EdgeType.Jump
+            )
+            graph.add_edge(block, blocks[index + 1], type_=EdgeType.FallThrough)
+        elif index + 1 < len(blocks):
+            graph.add_edge(block, blocks[index + 1], type_=EdgeType.FallThrough)
+    logger.debug("edges: %s", [(i[0].label, i[1].label) for i in graph.edges])
     return graph
 
 
@@ -134,7 +117,7 @@ def topological_sort(graph: "nx.DiGraph[Node]"):
     """
     # Find and mark strongly connected components
     sccs = list(nx.strongly_connected_components(graph))
-    node_idx: dict[str, int] = {}
+    node_idx: dict[int, int] = {}
     idx_node = defaultdict(list)
     for idx, scc in enumerate(sccs):
         if len(scc) <= 1:
@@ -271,13 +254,13 @@ def match_cyclic_while(node, graph):
     return loop_dic
 
 
-def parse_block_stack(insts: Iterable[DecompLine]) -> ParsedBlock:
+def parse_block_stack(insts: Iterable[Instruction]) -> ParsedBlock:
     """Decompile a basic block into statements and an optional condition."""
     stack: list[str] = []
     lines: list[str] = []
     condition_expr: str | None = None
 
-    for _, inst in insts:
+    for inst in insts:
         op, arg = inst.op, inst.args
         if op in {"RESUME", "CACHE", "NOP", "PRECALL", "GET_ITER"}:
             continue
@@ -352,11 +335,11 @@ def ast_to_python(node: "Node", indent: int = 0) -> str:
         operators: list[str] = []
         for condition_node in node.cond:
             if not isinstance(condition_node, Block):
-                raise TypeError("a compound condition must contain basic blocks, got %s", condition_node)
+                raise TypeError("a compound condition must contain basic blocks")
             parsed = parse_block_stack(condition_node.insts)
             before.extend(parsed.lines)
             expressions.append(parsed.condition or "True")
-            jump = condition_node.insts[-1].inst.op if condition_node.insts else ""
+            jump = condition_node.insts[-1].op if condition_node.insts else ""
             operators.append("or" if jump.endswith("IF_TRUE") else "and")
         condition = expressions[0] if expressions else "True"
         for operator, expression in zip(operators, expressions[1:]):
@@ -433,7 +416,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     graph = split_block_sep(insts)
     if args.draw_graph:
         draw_graph(graph, args.input.replace(".txt", ".jpg"))
-    head = next(i for i in graph.nodes if i.label == "0")
+    head = next(i for i in graph.nodes if i.label == 0)
     nodes = [head] + [i[1] for i in nx.bfs_edges(graph, head)]
     # nodes = topological_sort(graph)
     logger.debug("-- Find acyclic pattern")
@@ -459,7 +442,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         while_loop = WhileLoopNode(node.label, loop_node[0], node)
         logger.debug("%s", while_loop)
 
-    head = next(i for i in graph.nodes if i.label == "0")
+    head = next(i for i in graph.nodes if i.label == 0)
     print(ast_to_python(graph_to_ast(graph, head)))
 
 

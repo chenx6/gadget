@@ -1,15 +1,12 @@
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import NamedTuple
 
 
 class Instruction(NamedTuple):
+    offset: int
     op: str
-    args: str
-
-
-class DecompLine(NamedTuple):
-    linenum: int
-    inst: Instruction
+    args: str | None = None
 
 
 class ParsedBlock(NamedTuple):
@@ -19,12 +16,12 @@ class ParsedBlock(NamedTuple):
 
 @dataclass(frozen=True, order=True)
 class Node:
-    label: str
+    label: int
 
 
 @dataclass(frozen=True)
 class Block(Node):
-    insts: tuple[DecompLine, ...]
+    insts: tuple[Instruction, ...]
 
 
 @dataclass(frozen=True)
@@ -58,5 +55,8 @@ class SequenceNode(Node):
 class ExitNode(Node): ...
 
 
-GraphFromTo = tuple[str, str]
-DecompLines = list[DecompLine]
+class EdgeType(Enum):
+    True_ = auto()
+    False_ = auto()
+    FallThrough = auto()
+    Jump = auto()
