@@ -235,14 +235,16 @@ def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
             cond = common[0]
             cond_end = left_succs[0]
             region_nodes = []
+            cond_nodes = []
             # Collect nodes between the condition and its exit.
             # Assume these nodes belong to the same condition.
             for curr_node in sorted(graph.nodes, key=lambda n: n.label):
-                if int(curr_node.label) > int(cond.label) and int(
-                    curr_node.label
-                ) < int(cond_end.label):
+                if cond.label < curr_node.label < cond_end.label:
                     region_nodes.append(curr_node)
-            if_nodes = (cond, *region_nodes)
+                    if curr_node not in (left, right):
+                        # Left and right nodes don't in condition nodes
+                        cond_nodes.append(curr_node)
+            if_nodes = (cond, *cond_nodes)
             cg = IfElseMultipleNode(cond.label, if_nodes, left, right)
             replace_region(graph, cond, region_nodes, cg, cond_end)
             return cg
@@ -291,8 +293,6 @@ def parse_block_stack(insts: Iterable[Instruction]) -> ParsedBlock:
         elif op.startswith("POP_JUMP"):
             if stack:
                 condition_expr = stack.pop()
-            if condition_expr is not None and op.endswith("IF_TRUE"):
-                condition_expr = f"not ({condition_expr})"
         elif op == "RETURN_VALUE":
             value = stack.pop() if stack else "None"
             lines.append(f"return {value}")
