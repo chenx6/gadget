@@ -81,6 +81,9 @@ def split_block_sep(insts: list[Instruction]):
             leaders.add(int(inst.args))
         if inst.op in COND_JUMPS:
             leaders.add(insts[index + 1].offset)
+        if inst.op == "FOR_ITER" and inst.args:
+            leaders.add(int(inst.args))
+            leaders.add(int(insts[index + 1].offset))
     blocks: list[Block] = []
     curr_block_insts: list[Instruction] = []
     for inst in insts:
@@ -101,6 +104,11 @@ def split_block_sep(insts: list[Instruction]):
                 block, label_to_block[int(tail_inst.args)], type_=EdgeType.Jump
             )
         elif tail_inst.op in COND_JUMPS and tail_inst.args:
+            graph.add_edge(
+                block, label_to_block[int(tail_inst.args)], type_=EdgeType.Jump
+            )
+            graph.add_edge(block, blocks[index + 1], type_=EdgeType.FallThrough)
+        elif tail_inst.op == "FOR_ITER" and tail_inst.args:
             graph.add_edge(
                 block, label_to_block[int(tail_inst.args)], type_=EdgeType.Jump
             )
