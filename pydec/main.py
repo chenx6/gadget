@@ -104,10 +104,14 @@ def split_block_sep(insts: list[Instruction]):
                 block, label_to_block[int(tail_inst.args)], type_=EdgeType.Jump
             )
         elif tail_inst.op in COND_JUMPS and tail_inst.args:
-            graph.add_edge(
-                block, label_to_block[int(tail_inst.args)], type_=EdgeType.Jump
-            )
-            graph.add_edge(block, blocks[index + 1], type_=EdgeType.FallThrough)
+            if tail_inst.op.endswith("TRUE"):
+                jump_type = EdgeType.True_
+                fall_type = EdgeType.False_
+            else:
+                jump_type = EdgeType.False_
+                fall_type = EdgeType.True_
+            graph.add_edge(block, label_to_block[int(tail_inst.args)], type_=jump_type)
+            graph.add_edge(block, blocks[index + 1], type_=fall_type)
         elif tail_inst.op == "FOR_ITER" and tail_inst.args:
             graph.add_edge(
                 block, label_to_block[int(tail_inst.args)], type_=EdgeType.Jump
