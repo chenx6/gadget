@@ -6,7 +6,7 @@ from havlak import havlak
 
 def test_havlak():
     graph = nx.DiGraph()
-    third, forth, fifth, sixth, seventh, eighth = [Node(str(i)) for i in range(3, 9)]
+    third, forth, fifth, sixth, seventh, eighth = [Node(i) for i in range(3, 9)]
     graph.add_edges_from(
         [
             (third, forth),

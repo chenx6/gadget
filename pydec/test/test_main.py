@@ -1,11 +1,10 @@
 from main import split_block_sep, parse_dis_output
 
 
-def test_spilt_block_backward():
+def test_for_iter_cfg():
     with open("test_prog/while_loop_3.txt") as f:
-        text = f.read()
-    lines = parse_dis_output(text)
-    graph = split_block_sep(lines)
-    prev_node = next(i for i in graph.nodes if i.label == "34")
-    next_node = next(i for i in graph.nodes if i.label == "70")
-    assert next(graph.successors(prev_node)) == next_node
+        graph = split_block_sep(parse_dis_output(f.read()))
+    blocks = {node.label: node for node in graph}
+    assert set(blocks) == {0, 34, 36, 70}
+    assert {node.label for node in graph.successors(blocks[34])} == {36, 70}
+    assert {node.label for node in graph.successors(blocks[36])} == {34}

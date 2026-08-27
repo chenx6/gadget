@@ -1,25 +1,27 @@
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import NamedTuple
 
 
 class Instruction(NamedTuple):
+    offset: int
     op: str
-    args: str
+    args: str | None = None
 
 
-class DecompLine(NamedTuple):
-    linenum: int
-    inst: Instruction
+class ParsedBlock(NamedTuple):
+    lines: list[str]
+    condition: str | None
 
 
 @dataclass(frozen=True, order=True)
 class Node:
-    label: str
+    label: int
 
 
 @dataclass(frozen=True)
 class Block(Node):
-    insts: tuple[DecompLine, ...]
+    insts: tuple[Instruction, ...]
 
 
 @dataclass(frozen=True)
@@ -42,5 +44,19 @@ class WhileLoopNode(Node):
     body: Node
 
 
-GraphFromTo = tuple[str, str]
-DecompLines = list[DecompLine]
+@dataclass(frozen=True)
+class SequenceNode(Node):
+    """A sequence of structured nodes, in source-code order."""
+
+    nodes: tuple[Node, ...]
+
+
+@dataclass(frozen=True)
+class ExitNode(Node): ...
+
+
+class EdgeType(Enum):
+    True_ = auto()
+    False_ = auto()
+    FallThrough = auto()
+    Jump = auto()
