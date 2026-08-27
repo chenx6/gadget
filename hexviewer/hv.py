@@ -175,9 +175,9 @@ class HexViewerViewModel:
             elif key == KEY_UP:
                 if self.line_offset.value >= 1:
                     self.line_offset.value -= 1
-            elif key == KEY_NPAGE:
+            elif key == KEY_NPAGE or key == ord("D") & 0x1F:
                 self.line_offset.value += 10
-            elif key == KEY_PPAGE:
+            elif key == KEY_PPAGE or key == ord("B") & 0x1F:
                 if self.line_offset.value >= 10:
                     self.line_offset.value -= 10
 
