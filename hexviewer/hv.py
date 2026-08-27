@@ -231,7 +231,7 @@ class HexViewerView:
                 col += len(hex_text)
             for h in line_data:
                 char_text = chr(h)
-                if not char_text.isprintable():
+                if not 0x20 < h < 0x7F:
                     char_text = "."
                 color = get_color(h)
                 self.stdscr.addstr(idx, col, char_text, color_pair(color))
