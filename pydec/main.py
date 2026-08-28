@@ -160,32 +160,37 @@ def topological_sort(graph: "nx.DiGraph[Node]"):
     return res
 
 
-def _least_common_ancestor(
+def _nearest_common_dominator(
     left_pred: list["Node"], right_pred: list["Node"], graph: "nx.DiGraph[Node]"
-):
-    # Record left node's ancestors
-    all_left_pred: set[str] = set()
-    worklist = list(left_pred)
-    while worklist:
-        cnt = len(worklist)
-        for curr_node in worklist:
-            curr_pred = list(graph.predecessors(curr_node))
-            if all_left_pred.union(curr_pred):
-                # Found loop...
-                break
-            all_left_pred.intersection(curr_pred)
-            worklist += list(curr_pred)
-        worklist = worklist[cnt:]
-    # Find right node's ancestors, if ancestor in match record, return it
-    worklist = list(right_pred)
-    while worklist:
-        cnt = len(worklist)
-        for curr_node in worklist:
-            curr_pred = list(graph.predecessors(curr_node))
-            if all_left_pred.union(curr_pred):
-                return curr_pred
-            worklist += list(curr_pred)
-        worklist = worklist[cnt:]
+) -> "Node | None":
+    # Find root node
+    root = None
+    for node in graph:
+        if graph.in_degree(node) == 0:
+            root = node
+            break
+    if not root:
+        return
+    # Generate pred's dominator chain
+    immediate_dominators = nx.immediate_dominators(graph, root)
+    targets = set(left_pred) | set(right_pred)
+    if not targets:
+        return
+
+    def dominator_chain(node: "Node") -> set["Node"]:
+        chain = {node}
+        while immediate_dominators[node] != node:
+            node = immediate_dominators[node]
+            chain.add(node)
+        return chain
+
+    # Intersection all chains to find dominators
+    chains = [dominator_chain(node) for node in targets]
+    common = set.intersection(*chains)
+    if not common:
+        return
+    # A deeper chain means the dominator is closer to the matched branches.
+    return max(common, key=lambda node: len(dominator_chain(node)))
 
 
 def replace_region(
@@ -242,9 +247,8 @@ def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
         # Match if cond1 and cond2 ...:
         # This condition has same predecessor
         # but left predecessor and right predecessor have different ancestors
-        common = _least_common_ancestor(left_pred, right_pred, graph)
-        if common and len(common) == 1:
-            cond = common[0]
+        cond = _nearest_common_dominator(left_pred, right_pred, graph)
+        if cond:
             cond_end = left_succs[0]
             region_nodes = []
             cond_nodes = []
