@@ -70,10 +70,10 @@ def havlak(start_node, graph: "nx.DiGraph[Node]"):
         for n in node_list:
             for s in graph.successors(n):
                 if s.label == node.label:
-                    backs.append(s.label)
+                    backs.append(n.label)
                 if s not in node_list:
                     exits.append(s.label)
-            loop_regions.append(
-                LoopRegion(head, tuple(node_list), tuple(backs), tuple(exits))
-            )
+        loop_regions.append(
+            LoopRegion(head, tuple(node_list), tuple(backs), tuple(exits))
+        )
     return loop_regions
