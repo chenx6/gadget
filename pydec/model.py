@@ -41,7 +41,15 @@ class IfElseMultipleNode(Node):
 @dataclass(frozen=True)
 class WhileLoopNode(Node):
     cond: Node
-    body: Node
+    body: tuple[Node, ...]
+
+
+@dataclass(frozen=True)
+class LoopRegion:
+    header: Node
+    nodes: tuple[Node, ...]
+    backs: tuple[int, ...]
+    exits: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -53,6 +61,14 @@ class SequenceNode(Node):
 
 @dataclass(frozen=True)
 class ExitNode(Node): ...
+
+
+@dataclass(frozen=True)
+class BreakNode(Node): ...
+
+
+@dataclass(frozen=True)
+class ContinueNode(Node): ...
 
 
 class EdgeType(Enum):

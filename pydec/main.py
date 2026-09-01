@@ -267,9 +267,18 @@ def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
     return
 
 
-def match_cyclic_while(node, graph):
-    loop_dic = havlak(node, graph)
-    return loop_dic
+def match_cyclic_while(node: "Node", graph: "nx.DiGraph[Node]"):
+    loops = havlak(node, graph)
+    for loop in loops:
+        logger.debug(
+            "Loop header %s, backs %s, exits %s",
+            loop.header.label,
+            loop.backs,
+            loop.exits,
+        )
+        while_node = WhileLoopNode(loop.header.label, loop.header, loop.nodes)
+        exit_node = next(i for i in graph.nodes if i.label == loop.exits[0])
+        replace_region(graph, loop.header, loop.nodes, while_node, exit_node)
 
 
 def parse_block_stack(insts: Iterable[Instruction]) -> ParsedBlock:
@@ -376,9 +385,8 @@ def ast_to_python(node: "Node", indent: int = 0) -> str:
             *(prefix + line for line in parsed.lines),
             f"{prefix}while {condition}:",
         ]
-        lines.append(
-            ast_to_python(node.body, indent + 4) or " " * (indent + 4) + "pass"
-        )
+        for b in node.body:
+            lines.append(ast_to_python(b, indent + 4) or " " * (indent + 4) + "pass")
         return "\n".join(lines)
     if isinstance(node, ExitNode):
         return ""
@@ -450,14 +458,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         # So we find it in new graph
         node = label_node_[0]
     res = match_cyclic_while(node, graph)
-    for node, loop_node in res.items():
-        logger.debug("-- Loop %s %s", node.label, [i.label for i in loop_node])
-        if not loop_node:
-            continue
-        # Condition is on the last node
-        while_loop = WhileLoopNode(node.label, loop_node[0], node)
-        logger.debug("%s", while_loop)
-
     head = next(i for i in graph.nodes if i.label == 0)
     print(ast_to_python(graph_to_ast(graph, head)))
 

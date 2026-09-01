@@ -1,7 +1,7 @@
 from collections import defaultdict
 import networkx as nx
 
-from model import Node
+from model import Node, LoopRegion
 
 
 def dfs[T](
@@ -26,7 +26,7 @@ def is_ancestor(node_w, node_v, last_dic: dict):
     return node_w.label <= node_v.label and last_dic[node_v] <= last_dic[node_w]
 
 
-def havlak(start_node, graph: nx.DiGraph):
+def havlak(start_node, graph: "nx.DiGraph[Node]"):
     """
     Havlak-Tarjan
     ref: https://github.com/rsc/benchgraffiti/blob/master/havlak/havlak1.cc
@@ -56,5 +56,24 @@ def havlak(start_node, graph: nx.DiGraph):
                 if is_ancestor(node, y, last_dic):
                     worklist.append(y)
                     node_list.append(y)
-        loop_node[node] = node_list
-    return loop_node
+        if node_list:
+            loop_node[node] = node_list
+    # 提取循环的信息
+    loop_regions: list[LoopRegion] = []
+    for node, node_list in loop_node.items():
+        backs = []
+        exits = []
+        heads = sorted(graph.predecessors(node), key=lambda i: i.label)
+        if not heads:
+            continue
+        head = heads[0]
+        for n in node_list:
+            for s in graph.successors(n):
+                if s.label == node.label:
+                    backs.append(s.label)
+                if s not in node_list:
+                    exits.append(s.label)
+            loop_regions.append(
+                LoopRegion(head, tuple(node_list), tuple(backs), tuple(exits))
+            )
+    return loop_regions
