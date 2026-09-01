@@ -6,24 +6,24 @@ from model import Node, LoopRegion
 
 def dfs[T](
     graph: "nx.DiGraph[T]",
-    start_node: T,
+    node: T,
     visited: set[T],
+    dfs_number: dict[T, int],
     last_dic: dict[T, int],
     num: int,
 ):
-    visited.add(start_node)
-    last_num = num
-    if start_node not in graph:
-        return last_num
-    for node in graph.successors(start_node):
-        if node not in visited:
-            last_num = dfs(graph, node, visited, last_dic, num + 1)
-    last_dic[start_node] = last_num
-    return last_num
+    visited.add(node)
+    dfs_number[node] = num
+    num += 1
+    for succ in graph.successors(node):
+        if succ not in visited:
+            num = dfs(graph, succ, visited, dfs_number, last_dic, num)
+    last_dic[node] = num - 1
+    return num
 
 
-def is_ancestor(node_w, node_v, last_dic: dict):
-    return node_w.label <= node_v.label and last_dic[node_v] <= last_dic[node_w]
+def is_ancestor(node_w, node_v, dfs_number: dict, last_dic: dict):
+    return dfs_number[node_w] <= dfs_number[node_v] <= last_dic[node_w]
 
 
 def havlak(start_node, graph: "nx.DiGraph[Node]"):
@@ -35,13 +35,14 @@ def havlak(start_node, graph: "nx.DiGraph[Node]"):
     # 用 DFS 来分配前序编号
     visited = set()
     last_dic = {}
-    dfs(graph, start_node, visited, last_dic, 0)
+    dfs_number = {}
+    dfs(graph, start_node, visited, dfs_number, last_dic, 0)
     # 通过编号来判断祖先关系
     back_preds = defaultdict(list)
     non_back_preds = defaultdict(list)
     for node in graph.nodes:
         for pred in graph.predecessors(node):
-            if is_ancestor(node, pred, last_dic):
+            if is_ancestor(node, pred, dfs_number, last_dic):
                 back_preds[node].append(pred)
             else:
                 non_back_preds[node].append(pred)
@@ -53,7 +54,7 @@ def havlak(start_node, graph: "nx.DiGraph[Node]"):
         while len(worklist):
             x = worklist.pop(0)
             for y in non_back_preds.get(x, []):
-                if is_ancestor(node, y, last_dic):
+                if is_ancestor(node, y, dfs_number, last_dic):
                     worklist.append(y)
                     node_list.append(y)
         if node_list:
