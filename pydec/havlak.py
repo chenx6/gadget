@@ -47,34 +47,34 @@ def havlak(start_node, graph: "nx.DiGraph[Node]"):
             else:
                 non_back_preds[node].append(pred)
     # 用 worklist 算法来计算祖先
-    loop_node: dict[Node, list[Node]] = {}
+    loop_node: dict[Node, set[Node]] = {}
     for node in reversed(list(graph.nodes)):
-        node_list = list(back_preds[node])
-        worklist = list(node_list)
-        while len(worklist):
+        node_set = set(back_preds[node])
+        worklist = list(node_set)
+        while worklist:
             x = worklist.pop(0)
             for y in non_back_preds.get(x, []):
-                if is_ancestor(node, y, dfs_number, last_dic):
+                if y not in node_set and is_ancestor(node, y, dfs_number, last_dic):
                     worklist.append(y)
-                    node_list.append(y)
-        if node_list:
-            loop_node[node] = node_list
+                    node_set.add(y)
+        if node_set:
+            loop_node[node] = {node, *node_set}
     # 提取循环的信息
     loop_regions: list[LoopRegion] = []
-    for node, node_list in loop_node.items():
+    for node, node_set in loop_node.items():
         backs = []
         exits = []
         heads = sorted(graph.predecessors(node), key=lambda i: i.label)
         if not heads:
             continue
         head = heads[0]
-        for n in node_list:
+        for n in node_set:
             for s in graph.successors(n):
                 if s.label == node.label:
                     backs.append(n.label)
-                if s not in node_list:
+                if s not in node_set:
                     exits.append(s.label)
         loop_regions.append(
-            LoopRegion(head, tuple(node_list), tuple(backs), tuple(exits))
+            LoopRegion(head, tuple(node_set), tuple(backs), tuple(exits))
         )
     return loop_regions
