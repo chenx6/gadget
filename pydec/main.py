@@ -60,7 +60,7 @@ def parse_dis_output(output: str):
             if argp:
                 argp = argp.removeprefix("(").removesuffix(")").removeprefix("to ")
             else:
-                argp = ""
+                argp = arg
             insts.append(Instruction(int(linenum), op, argp))
     return insts
 
@@ -324,7 +324,10 @@ def parse_block_stack(insts: Iterable[Instruction]) -> ParsedBlock:
             stack.append(f"{stack.pop()}.{arg}")
         elif op == "BUILD_LIST":
             stack.append("[]")
-        elif op.startswith("LOAD_"):
+        elif op == "LOAD_METHOD" and arg:
+            obj = stack.pop()
+            stack.append(f"{obj}.{arg}")
+        elif op.startswith("LOAD_") and arg:
             # LOAD_GLOBAL may be displayed as ``NULL + print`` by dis.
             stack.append(arg.removeprefix("NULL + "))
         elif op.startswith("STORE_"):
@@ -336,8 +339,12 @@ def parse_block_stack(insts: Iterable[Instruction]) -> ParsedBlock:
             index, value = stack.pop(), stack.pop()
             stack.append(f"{value}[{index}]")
         elif op == "CALL":
-            argc = int(arg) if arg.isdigit() else max(0, len(stack) - 1)
-            args = stack[-argc:] if argc else []
+            argc = max(0, len(stack) - 1)
+            if arg and arg.isdigit():
+                argc = int(arg)
+            args = []
+            if argc:
+                args = stack[-argc:]
             if argc:
                 del stack[-argc:]
             func = stack.pop()
