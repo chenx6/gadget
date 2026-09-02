@@ -288,20 +288,12 @@ def match_cyclic_while(node: "Node", graph: "nx.DiGraph[Node]"):
         loop_nodes = loop.nodes
         for bc in break_candicate:
             # Generate if ...: break node
-            target_idx = -1
-            target_node = None
-            for idx, loop_node in enumerate(loop_nodes):
-                if loop_node.label == bc.from_:
-                    target_idx = idx
-                    target_node = loop_node
-                    break
-            if not target_node:
-                continue
+            target_node = next(filter(lambda i: i.label == bc.from_, loop_nodes))
             break_node = BreakNode(bc.to)
             # TODO: Better matching if branch
             if_break_node = IfElseNode(bc.from_, target_node, break_node, None)
-            loop_nodes = (
-                loop_nodes[0:target_idx] + (if_break_node,) + loop_nodes[target_idx:]
+            loop_nodes = tuple(
+                map(lambda i: i if i.label != bc.from_ else if_break_node, loop_nodes)
             )
         while_node = WhileLoopNode(loop.header.label, loop.header, loop_nodes)
         exit_node = next(i for i in graph.nodes if i.label == loop.exits[-1].to)
