@@ -334,6 +334,8 @@ def parse_block_stack(insts: Iterable[Instruction]) -> ParsedBlock:
             lines.append(f"{arg} = {stack.pop()}")
         elif op in {"BINARY_OP", "COMPARE_OP"}:
             right, left = stack.pop(), stack.pop()
+            if arg in ("+=", "-=", "*=", "/=", "%="):
+                arg = arg[0]
             stack.append(f"{left} {arg} {right}")
         elif op == "BINARY_SUBSCR":
             index, value = stack.pop(), stack.pop()
