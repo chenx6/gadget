@@ -19,5 +19,6 @@ def test_havlak():
         ]
     )
     res = havlak(third, graph)
-    assert res[fifth] == [sixth, fifth]
-    assert res[forth] == [seventh, sixth, fifth, forth]
+    assert res
+    assert res[0].nodes == (fifth, sixth)
+    assert res[1].nodes == (forth, fifth, sixth, seventh)

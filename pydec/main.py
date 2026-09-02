@@ -11,6 +11,8 @@ import networkx as nx
 from havlak import havlak
 from model import (
     Block,
+    BreakNode,
+    Edge,
     EdgeType,
     IfElseMultipleNode,
     IfElseNode,
@@ -267,9 +269,43 @@ def match_acyclic_if_else(node: "Node", graph: "nx.DiGraph[Node]"):
     return
 
 
-def match_cyclic_while(node, graph):
-    loop_dic = havlak(node, graph)
-    return loop_dic
+def match_cyclic_while(node: "Node", graph: "nx.DiGraph[Node]"):
+    loops = havlak(node, graph)
+    for loop in loops:
+        logger.debug(
+            "Loop header: %s, nodes: %s, backs: %s, exits: %s",
+            loop.header.label,
+            [i.label for i in loop.nodes],
+            loop.backs,
+            loop.exits,
+        )
+        # Find break node when exit node is not from back node
+        back_from = [i.from_ for i in loop.backs]
+        break_candicate: list[Edge] = []
+        for e in loop.exits:
+            if e.from_ not in back_from:
+                break_candicate.append(e)
+        loop_nodes = loop.nodes
+        for bc in break_candicate:
+            # Generate if ...: break node
+            target_idx = -1
+            target_node = None
+            for idx, loop_node in enumerate(loop_nodes):
+                if loop_node.label == bc.from_:
+                    target_idx = idx
+                    target_node = loop_node
+                    break
+            if not target_node:
+                continue
+            break_node = BreakNode(bc.to)
+            # TODO: Better matching if branch
+            if_break_node = IfElseNode(bc.from_, target_node, break_node, None)
+            loop_nodes = (
+                loop_nodes[0:target_idx] + (if_break_node,) + loop_nodes[target_idx:]
+            )
+        while_node = WhileLoopNode(loop.header.label, loop.header, loop_nodes)
+        exit_node = next(i for i in graph.nodes if i.label == loop.exits[-1].to)
+        replace_region(graph, loop.header, loop.nodes, while_node, exit_node)
 
 
 def parse_block_stack(insts: Iterable[Instruction]) -> ParsedBlock:
@@ -286,6 +322,8 @@ def parse_block_stack(insts: Iterable[Instruction]) -> ParsedBlock:
             continue
         if op == "LOAD_ATTR":
             stack.append(f"{stack.pop()}.{arg}")
+        elif op == "BUILD_LIST":
+            stack.append("[]")
         elif op.startswith("LOAD_"):
             # LOAD_GLOBAL may be displayed as ``NULL + print`` by dis.
             stack.append(arg.removeprefix("NULL + "))
@@ -376,12 +414,13 @@ def ast_to_python(node: "Node", indent: int = 0) -> str:
             *(prefix + line for line in parsed.lines),
             f"{prefix}while {condition}:",
         ]
-        lines.append(
-            ast_to_python(node.body, indent + 4) or " " * (indent + 4) + "pass"
-        )
+        for b in node.body:
+            lines.append(ast_to_python(b, indent + 4) or " " * (indent + 4) + "pass")
         return "\n".join(lines)
     if isinstance(node, ExitNode):
         return ""
+    if isinstance(node, BreakNode):
+        return f"{prefix}break"
     raise TypeError(f"unsupported AST node: {type(node).__name__}")
 
 
@@ -432,32 +471,24 @@ def main(argv: Sequence[str] | None = None) -> None:
     graph = split_block_sep(insts)
     if args.draw_graph:
         draw_graph(graph, args.input.replace(".txt", ".jpg"))
-    head = next(i for i in graph.nodes if i.label == 0)
-    nodes = [head] + [i[1] for i in nx.bfs_edges(graph, head)]
-    # nodes = topological_sort(graph)
     logger.debug("-- Find acyclic pattern")
-    node = None
-    for node in reversed(nodes):
-        result = match_acyclic_if_else(node, graph)
-        logger.debug("%s %s", node.label, result)
-    if not node:
+    head = None
+    while True:
+        head = next(i for i in graph.nodes if i.label == 0)
+        nodes = [head] + [dst for _, dst in nx.bfs_edges(graph, head)]
+        finished = True
+        for node in reversed(nodes):
+            result = match_acyclic_if_else(node, graph)
+            logger.debug("%s %s", node.label, result)
+            if result:
+                finished = False
+                break
+        if finished:
+            break
+    if not head:
         return
     logger.debug("-- Find cyclic pattern")
-    if node not in graph and (
-        label_node_ := [i for i in graph.nodes if i.label == node.label]
-    ):
-        # First node might be merged and cannot found in graph
-        # So we find it in new graph
-        node = label_node_[0]
-    res = match_cyclic_while(node, graph)
-    for node, loop_node in res.items():
-        logger.debug("-- Loop %s %s", node.label, [i.label for i in loop_node])
-        if not loop_node:
-            continue
-        # Condition is on the last node
-        while_loop = WhileLoopNode(node.label, loop_node[0], node)
-        logger.debug("%s", while_loop)
-
+    match_cyclic_while(head, graph)
     head = next(i for i in graph.nodes if i.label == 0)
     print(ast_to_python(graph_to_ast(graph, head)))
 
