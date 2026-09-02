@@ -44,12 +44,17 @@ class WhileLoopNode(Node):
     body: tuple[Node, ...]
 
 
+class Edge(NamedTuple):
+    from_: int
+    to: int
+
+
 @dataclass(frozen=True)
 class LoopRegion:
     header: Node
     nodes: tuple[Node, ...]
-    backs: tuple[int, ...]
-    exits: tuple[int, ...]
+    backs: tuple[Edge, ...]
+    exits: tuple[Edge, ...]
 
 
 @dataclass(frozen=True)

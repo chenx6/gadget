@@ -1,7 +1,7 @@
 from collections import defaultdict
 import networkx as nx
 
-from model import Node, LoopRegion
+from model import Node, LoopRegion, Edge
 
 
 def dfs[T](
@@ -62,8 +62,8 @@ def havlak(start_node, graph: "nx.DiGraph[Node]"):
     # 提取循环的信息
     loop_regions: list[LoopRegion] = []
     for node, node_set in loop_node.items():
-        backs = []
-        exits = []
+        backs: list[Edge] = []
+        exits: list[Edge] = []
         heads = sorted(graph.predecessors(node), key=lambda i: i.label)
         if not heads:
             continue
@@ -71,10 +71,9 @@ def havlak(start_node, graph: "nx.DiGraph[Node]"):
         for n in node_set:
             for s in graph.successors(n):
                 if s.label == node.label:
-                    backs.append(n.label)
+                    backs.append(Edge(n.label, s.label))
                 if s not in node_set:
-                    exits.append(s.label)
-        loop_regions.append(
-            LoopRegion(head, tuple(node_set), tuple(backs), tuple(exits))
-        )
+                    exits.append(Edge(n.label, s.label))
+        nodes = tuple(sorted(node_set, key=lambda n: n.label))
+        loop_regions.append(LoopRegion(head, nodes, tuple(backs), tuple(exits)))
     return loop_regions
