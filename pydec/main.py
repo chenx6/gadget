@@ -471,24 +471,24 @@ def main(argv: Sequence[str] | None = None) -> None:
     graph = split_block_sep(insts)
     if args.draw_graph:
         draw_graph(graph, args.input.replace(".txt", ".jpg"))
-    head = next(i for i in graph.nodes if i.label == 0)
-    nodes = [head] + [i[1] for i in nx.bfs_edges(graph, head)]
-    # nodes = topological_sort(graph)
     logger.debug("-- Find acyclic pattern")
-    node = None
-    for node in reversed(nodes):
-        result = match_acyclic_if_else(node, graph)
-        logger.debug("%s %s", node.label, result)
-    if not node:
+    head = None
+    while True:
+        head = next(i for i in graph.nodes if i.label == 0)
+        nodes = [head] + [dst for _, dst in nx.bfs_edges(graph, head)]
+        finished = True
+        for node in reversed(nodes):
+            result = match_acyclic_if_else(node, graph)
+            logger.debug("%s %s", node.label, result)
+            if result:
+                finished = False
+                break
+        if finished:
+            break
+    if not head:
         return
     logger.debug("-- Find cyclic pattern")
-    if node not in graph and (
-        label_node_ := [i for i in graph.nodes if i.label == node.label]
-    ):
-        # First node might be merged and cannot found in graph
-        # So we find it in new graph
-        node = label_node_[0]
-    match_cyclic_while(node, graph)
+    match_cyclic_while(head, graph)
     head = next(i for i in graph.nodes if i.label == 0)
     print(ast_to_python(graph_to_ast(graph, head)))
 
