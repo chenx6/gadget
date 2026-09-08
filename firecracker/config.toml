@@ -1,0 +1,5 @@
+SOCKET = "/tmp/firecracker.socket"
+KERNEL = "./vm/vmlinux.bin"
+ROOTFS = "./vm/disk.raw"
+VCPU = 2
+MEM = 1024
