@@ -920,18 +920,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tiny_skia_render"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image",
- "parley",
- "resvg",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "tinystr"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1159,6 +1147,18 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "x_card_renderer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "parley",
+ "resvg",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "xmlwriter"

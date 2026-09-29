@@ -1,5 +1,5 @@
 [package]
-name = "tiny_skia_render"
+name = "x_card_renderer"
 version = "0.1.0"
 edition = "2024"
 
