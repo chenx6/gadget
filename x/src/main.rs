@@ -64,7 +64,7 @@ fn text_place(text: &str, x: f32, y: f32, max_width: f32, font_size: f32) -> (St
     (out, last_y)
 }
 
-fn image_place(images: &Vec<String>, x: f32, y: f32, width: f32) -> Result<(String, f32)> {
+fn image_place(images: &[String], x: f32, y: f32, width: f32) -> Result<(String, f32)> {
     let mut last_y = y;
     let mut res = String::new();
     if images.len() == 1 {
@@ -75,7 +75,7 @@ fn image_place(images: &Vec<String>, x: f32, y: f32, width: f32) -> Result<(Stri
             images[0], x, y, width, new_height
         ));
         res.push('\n');
-        last_y = last_y.max(y + new_height as f32);
+        last_y = last_y.max(y + new_height);
     } else {
         const NEW_WIDTH: u32 = 180;
         const IMAGE_GAP: f32 = 8.0;
@@ -135,7 +135,7 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     // tiny-skia 是 RGBA，需要转换成 RGB
     let rgba = pixmap.data();
     let mut rgb = Vec::with_capacity((width * height * 3) as usize);
-    for pixel in rgba.chunks_exact(4) {
+    for pixel in rgba.as_chunks::<4>().0 {
         rgb.push(pixel[0]);
         rgb.push(pixel[1]);
         rgb.push(pixel[2]);
@@ -181,7 +181,7 @@ fn render_twitter_card(tweet: &Tweet, output: &str, retweet_image: Option<&str>)
     // 如果有转发，就渲染转发
     let last_y = if let Some(retweet_image) = retweet_image {
         let (retweet_image_svg, last_y) = image_place(
-            &vec![retweet_image.to_string()],
+            &[retweet_image.to_string()],
             PADDING,
             last_y + PADDING,
             CONTENT_WIDTH,
@@ -200,7 +200,7 @@ fn render_twitter_card(tweet: &Tweet, output: &str, retweet_image: Option<&str>)
         .replace("{{ ID }}", &tweet.screen_name)
         .replace("{{ TEXT }}", &text)
         .replace("{{ IMAGE }}", &image_svg);
-    render_svg(output_svg.as_bytes(), &output, 95)?;
+    render_svg(output_svg.as_bytes(), output, 95)?;
     Ok(())
 }
 
@@ -217,7 +217,7 @@ fn main() -> Result<()> {
     let mut retweet_image = None;
     if let Some(retweet) = &tweet.retweet {
         retweet_image = Some("data/retweet.jpg");
-        render_twitter_card(&retweet, &retweet_image.expect("?"), None)?;
+        render_twitter_card(retweet, retweet_image.expect("?"), None)?;
     }
     render_twitter_card(&tweet, &output, retweet_image)
 }
