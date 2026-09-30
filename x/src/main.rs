@@ -145,11 +145,11 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     );
     // tiny-skia 是 RGBA，需要转换成 RGB
     let rgba = pixmap.data();
-    let mut rgb = Vec::with_capacity((width * height * 3) as usize);
-    for pixel in rgba.as_chunks::<4>().0 {
-        rgb.push(pixel[0]);
-        rgb.push(pixel[1]);
-        rgb.push(pixel[2]);
+    let mut rgb = vec![0u8; (width * height * 3) as usize];
+    for (dst, src) in rgb.chunks_exact_mut(3).zip(rgba.chunks_exact(4)) {
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[2];
     }
     // JPEG 编码
     let file = File::create(output_path)?;
