@@ -121,7 +121,7 @@ fn split_place(x: f32, y: f32, width: f32) -> (String, f32) {
 fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     // 解析 SVG
     let mut options = usvg::Options::default();
-    options.fontdb_mut().load_system_fonts();
+    options.fontdb_mut().load_fonts_dir("font");
     let tree = usvg::Tree::from_data(svg_data, &options).context("解析 SVG 失败")?;
     let size = tree.size();
     let width = size.width().ceil() as u32;
@@ -147,6 +147,7 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    env_logger::init();
     let mut args = args().skip(1);
     if args.len() != 2 {
         anyhow::bail!("Usage: ./prog <tweet.json> <output.jpg>");
