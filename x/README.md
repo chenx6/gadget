@@ -7,7 +7,7 @@ Fetcher:
 ```bash
 # Edit header.json to add request header
 # Set TWITTER_LIST_ID environment variable
-$ TWITTER_LIST_ID=2101633191509622929
+$ export TWITTER_LIST_ID=2101633191509622929
 # Run!
 $ uv run src/twitter.py
 # Will put twitter json into data/tweet.db
