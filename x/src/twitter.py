@@ -61,7 +61,7 @@ def extract_original_tweet(rs_result: dict):
     return {
         "tweet_id": tweet_id,
         "created_at": created_at,
-        "lang": "ja",
+        "lang": legacy.get("lang"),
         "user_name": user_name,
         "screen_name": screen_name,
         "avatar_url": avatar_url,
