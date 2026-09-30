@@ -131,7 +131,11 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     // 使用 resvg 渲染
     let mut pixmap = Pixmap::new(width, height).context("创建 Pixmap 失败")?;
     pixmap.fill(tiny_skia::Color::WHITE);
-    resvg::render(&tree, Transform::from_scale(SCALE, SCALE), &mut pixmap.as_mut());
+    resvg::render(
+        &tree,
+        Transform::from_scale(SCALE, SCALE),
+        &mut pixmap.as_mut(),
+    );
     // tiny-skia 是 RGBA，需要转换成 RGB
     let rgba = pixmap.data();
     let mut rgb = Vec::with_capacity((width * height * 3) as usize);
@@ -210,14 +214,16 @@ fn main() -> Result<()> {
     if args.len() != 2 {
         anyhow::bail!("Usage: ./prog <tweet.json> <output.jpg>");
     }
-    let tweet = args.next().expect("");
-    let output = args.next().expect("");
+    let tweet = args.next().expect("unreachable");
+    let output = args.next().expect("unreachable");
     let tweet = read_to_string(&tweet).with_context(|| format!("读取推文 JSON 失败: {tweet}"))?;
     let tweet: Tweet = serde_json::from_str(&tweet).context("解析推文 JSON 失败")?;
-    let mut retweet_image = None;
-    if let Some(retweet) = &tweet.retweet {
-        retweet_image = Some("data/retweet.jpg");
-        render_twitter_card(retweet, retweet_image.expect("?"), None)?;
-    }
+    let retweet_image = if let Some(retweet) = &tweet.retweet {
+        let retweet_image = "data/retweet.jpg";
+        render_twitter_card(retweet, retweet_image, None)?;
+        Some(retweet_image)
+    } else {
+        None
+    };
     render_twitter_card(&tweet, &output, retweet_image)
 }
