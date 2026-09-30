@@ -1402,6 +1402,7 @@ dependencies = [
  "anyhow",
  "env_logger",
  "image",
+ "log",
  "parley",
  "resvg",
  "serde",

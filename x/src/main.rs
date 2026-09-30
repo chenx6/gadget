@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use image::{ColorType, ImageReader};
+use log::debug;
 use parley::{
     Alignment, AlignmentOptions, FontContext, Layout, LayoutContext, PositionedLayoutItem,
     StyleProperty,
@@ -233,5 +234,6 @@ fn main() -> Result<()> {
         None
     };
     let (output_svg, _) = build_twitter_card(&tweet, retweet)?;
+    debug!("{}", output_svg);
     render_svg(output_svg.as_bytes(), &output, 95)
 }
