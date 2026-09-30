@@ -194,12 +194,11 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
     // 如果有转发，就把转发卡片的 SVG 直接嵌套进来
     let last_y = if let Some((retweet_svg, retweet_height)) = retweet {
         let scale = CONTENT_WIDTH / SVG_WIDTH;
-        let y = last_y + PADDING;
         image_svg.push_str(&format!(
-            r#"<g transform="translate({PADDING} {y}) scale({scale})">{retweet_svg}</g>"#
+            r#"<g transform="translate({PADDING} {last_y}) scale({scale})">{retweet_svg}</g>"#
         ));
         image_svg.push('\n');
-        y + retweet_height * scale
+        last_y + retweet_height * scale
     } else {
         last_y
     };
