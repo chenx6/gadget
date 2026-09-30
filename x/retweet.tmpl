@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="{{ HEIGHT }}" viewBox="0 0 600 {{ HEIGHT }}">
+  <defs>
+    <clipPath id="rounded" clipPathUnits="objectBoundingBox">
+      <rect x="0" y="0" width="1" height="1" rx="0.01" ry="0.01" />
+    </clipPath>
+    <clipPath id="avatarClip">
+      <rect x="16" y="16" width="24" height="24" rx="4" ry="4" />
+    </clipPath>
+  </defs>
+  <rect x=".5" y=".5" width="599" height="{{ HEIGHT }}" rx="12" fill="#fff" stroke="#cfd9e2" />
+  <image href="{{ AVATAR }}" x="16" y="16" width="24" height="24" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)" />
+  <text x="48" y="30" font-family="Source Han Sans CN" font-size="16" dominant-baseline="middle">{{ USERNAME }}</text>
+  <g font-family="Source Han Sans CN" font-size="16">
+    {{ TEXT }}
+  </g>
+  {{ IMAGE }}
+</svg>
