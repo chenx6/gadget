@@ -78,7 +78,7 @@ fn image_place(images: &[String], x: f32, y: f32, width: f32) -> Result<(String,
         let (w, h) = image::image_dimensions(&images[0])?;
         let new_height = width / w as f32 * h as f32;
         res.push_str(&format!(
-            r#"<image href="{}" x="{}" y="{}" width="{}" height="{}" clip-path="url(#rounded)" />"#,
+            r#"<image image-rendering="optimizeSpeed" href="{}" x="{}" y="{}" width="{}" height="{}" clip-path="url(#rounded)" />"#,
             images[0], x, y, width, new_height
         ));
         res.push('\n');
@@ -97,7 +97,7 @@ fn image_place(images: &[String], x: f32, y: f32, width: f32) -> Result<(String,
                 let img_name = format!("data/{}_{}.jpg", xidx, yidx);
                 img.save(&img_name)?;
                 res.push_str(&format!(
-                    r#"<image href="{}" x="{}" y="{}" width="{}" height="{}" clip-path="url(#rounded)" />"#,
+                    r#"<image image-rendering="optimizeSpeed" href="{}" x="{}" y="{}" width="{}" height="{}" clip-path="url(#rounded)" />"#,
                     img_name,
                     image_x,
                     image_y,
