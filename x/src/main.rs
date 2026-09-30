@@ -16,7 +16,8 @@ use tiny_skia::{Pixmap, Transform};
 use usvg::fontdb::Database;
 
 const PADDING: f32 = 16.0;
-const CONTENT_WIDTH: f32 = 600.0 - PADDING * 2.0;
+const SVG_WIDTH: f32 = 600.0;
+const CONTENT_WIDTH: f32 = SVG_WIDTH - PADDING * 2.0;
 static FONTDB: LazyLock<Arc<Database>> = LazyLock::new(|| {
     let mut db = Database::new();
     db.load_fonts_dir("font");
@@ -159,7 +160,7 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     Ok(())
 }
 
-fn render_twitter_card(tweet: &Tweet, output: &str, retweet_image: Option<&str>) -> Result<()> {
+fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(String, f32)> {
     let full_text = if tweet.full_text.starts_with("RT @") {
         "Retweeted"
     } else {
@@ -189,30 +190,29 @@ fn render_twitter_card(tweet: &Tweet, output: &str, retweet_image: Option<&str>)
     // 渲染图片
     let (mut image_svg, last_y) =
         image_place(&tweet.media_urls, PADDING, last_y + PADDING, CONTENT_WIDTH)?;
-    // 如果有转发，就渲染转发
-    let last_y = if let Some(retweet_image) = retweet_image {
-        let (retweet_image_svg, last_y) = image_place(
-            &[retweet_image.to_string()],
-            PADDING,
-            last_y + PADDING,
-            CONTENT_WIDTH,
-        )?;
-        image_svg.push_str(&retweet_image_svg);
-        last_y
+    // 如果有转发，就把转发卡片的 SVG 直接嵌套进来
+    let last_y = if let Some((retweet_svg, retweet_height)) = retweet {
+        let scale = CONTENT_WIDTH / SVG_WIDTH;
+        let y = last_y + PADDING;
+        image_svg.push_str(&format!(
+            r#"<g transform="translate({PADDING} {y}) scale({scale})">{retweet_svg}</g>"#
+        ));
+        image_svg.push('\n');
+        y + retweet_height * scale
     } else {
         last_y
     };
+    let height = last_y + PADDING;
     let output_svg = read_to_string("tweet.tmpl")
         .context("读取 SVG 模板失败")?
-        .replace("{{ HEIGHT }}", &(last_y + PADDING).to_string())
-        .replace("{{ BORDER_HEIGHT }}", &(last_y + PADDING - 1.0).to_string())
+        .replace("{{ HEIGHT }}", &height.to_string())
+        .replace("{{ BORDER_HEIGHT }}", &(height - 1.0).to_string())
         .replace("{{ AVATAR }}", &tweet.avatar_url)
         .replace("{{ USERNAME }}", &tweet.user_name)
         .replace("{{ ID }}", &tweet.screen_name)
         .replace("{{ TEXT }}", &text)
         .replace("{{ IMAGE }}", &image_svg);
-    render_svg(output_svg.as_bytes(), output, 95)?;
-    Ok(())
+    Ok((output_svg, height))
 }
 
 fn main() -> Result<()> {
@@ -225,12 +225,13 @@ fn main() -> Result<()> {
     let output = args.next().expect("unreachable");
     let tweet = read_to_string(&tweet).with_context(|| format!("读取推文 JSON 失败: {tweet}"))?;
     let tweet: Tweet = serde_json::from_str(&tweet).context("解析推文 JSON 失败")?;
-    let retweet_image = if let Some(retweet) = &tweet.retweet {
-        let retweet_image = "data/retweet.jpg";
-        render_twitter_card(retweet, retweet_image, None)?;
-        Some(retweet_image)
+    let retweet = if let Some(retweet) = &tweet.retweet {
+        // 如果有转发推特，则先渲染
+        let (svg, height) = build_twitter_card(retweet, None)?;
+        Some((svg, height))
     } else {
         None
     };
-    render_twitter_card(&tweet, &output, retweet_image)
+    let (output_svg, _) = build_twitter_card(&tweet, retweet)?;
+    render_svg(output_svg.as_bytes(), &output, 95)
 }
