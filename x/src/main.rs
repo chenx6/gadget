@@ -148,9 +148,14 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
 }
 
 fn render_twitter_card(tweet: &Tweet, output: &str, retweet_image: Option<&str>) -> Result<()> {
+    let full_text = if tweet.full_text.starts_with("RT @") {
+        "Retweeted"
+    } else {
+        &tweet.full_text
+    };
     // 渲染文本部分
     let mut text = String::new();
-    let (text_svg, last_y) = text_place(&tweet.full_text, PADDING, 64.0, CONTENT_WIDTH, 16.0);
+    let (text_svg, last_y) = text_place(full_text, PADDING, 64.0, CONTENT_WIDTH, 16.0);
     // 如果有翻译，就渲染翻译
     text.push_str(&text_svg);
     let last_y = if !tweet.translated_text.is_empty() {
