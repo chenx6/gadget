@@ -11,10 +11,17 @@ use serde::Deserialize;
 use std::env::args;
 use std::fs::{File, read_to_string};
 use std::io::BufWriter;
+use std::sync::{Arc, LazyLock};
 use tiny_skia::{Pixmap, Transform};
+use usvg::fontdb::Database;
 
 const PADDING: f32 = 16.0;
 const CONTENT_WIDTH: f32 = 600.0 - PADDING * 2.0;
+static FONTDB: LazyLock<Arc<Database>> = LazyLock::new(|| {
+    let mut db = Database::new();
+    db.load_fonts_dir("font");
+    Arc::new(db)
+});
 
 #[derive(Deserialize)]
 struct Tweet {
@@ -86,7 +93,7 @@ fn image_place(images: &[String], x: f32, y: f32, width: f32) -> Result<(String,
                 let image_y = y + yidx as f32 * step;
                 let img = ImageReader::open(image)?.decode()?;
                 // 等比例缩放并居中裁剪，横图和竖图都填满正方形。
-                let img = img.resize_to_fill(NEW_WIDTH, NEW_WIDTH, FilterType::Gaussian);
+                let img = img.resize_to_fill(NEW_WIDTH, NEW_WIDTH, FilterType::Triangle);
                 let img_name = format!("data/{}_{}.jpg", xidx, yidx);
                 img.save(&img_name)?;
                 res.push_str(&format!(
@@ -123,7 +130,7 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     // 解析 SVG
     const SCALE: f32 = 2.0;
     let mut options = usvg::Options::default();
-    options.fontdb_mut().load_fonts_dir("font");
+    options.fontdb = FONTDB.clone();
     let tree = usvg::Tree::from_data(svg_data, &options).context("解析 SVG 失败")?;
     let size = tree.size();
     let width = (size.width().ceil() * SCALE) as u32;
