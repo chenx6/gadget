@@ -162,7 +162,7 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
 
 fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(String, f32)> {
     let full_text = if tweet.full_text.starts_with("RT @") {
-        "Retweeted"
+        "↩ Retweeted"
     } else {
         &tweet.full_text
     };
