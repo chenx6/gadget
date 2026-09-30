@@ -121,16 +121,17 @@ fn split_place(x: f32, y: f32, width: f32) -> (String, f32) {
 
 fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     // 解析 SVG
+    const SCALE: f32 = 2.0;
     let mut options = usvg::Options::default();
     options.fontdb_mut().load_fonts_dir("font");
     let tree = usvg::Tree::from_data(svg_data, &options).context("解析 SVG 失败")?;
     let size = tree.size();
-    let width = size.width().ceil() as u32;
-    let height = size.height().ceil() as u32;
+    let width = (size.width().ceil() * SCALE) as u32;
+    let height = (size.height().ceil() * SCALE) as u32;
     // 使用 resvg 渲染
     let mut pixmap = Pixmap::new(width, height).context("创建 Pixmap 失败")?;
     pixmap.fill(tiny_skia::Color::WHITE);
-    resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
+    resvg::render(&tree, Transform::from_scale(SCALE, SCALE), &mut pixmap.as_mut());
     // tiny-skia 是 RGBA，需要转换成 RGB
     let rgba = pixmap.data();
     let mut rgb = Vec::with_capacity((width * height * 3) as usize);
