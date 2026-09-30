@@ -202,6 +202,8 @@ def update_task(conn: "Connection"):
         if not tweet_existed(conn, t["tweet_id"]):
             try:
                 save_pics(t)
+                if retweet := t.get("retweet"):
+                    save_pics(retweet)
             except Exception as e:  # noqa: BLE001
                 logger.error("Save picture failed: %s", e)
                 continue

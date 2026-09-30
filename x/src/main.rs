@@ -8,9 +8,9 @@ use parley::{
 };
 use resvg::{tiny_skia, usvg};
 use serde::Deserialize;
+use std::env::args;
 use std::fs::{File, read_to_string};
 use std::io::BufWriter;
-use std::env::args;
 use tiny_skia::{Pixmap, Transform};
 
 const PADDING: f32 = 16.0;
@@ -25,6 +25,7 @@ struct Tweet {
     #[serde(default)]
     translated_text: String,
     media_urls: Vec<String>,
+    retweet: Option<Box<Tweet>>,
 }
 
 fn text_place(text: &str, x: f32, y: f32, max_width: f32, font_size: f32) -> (String, f32) {
@@ -146,19 +147,11 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    env_logger::init();
-    let mut args = args().skip(1);
-    if args.len() != 2 {
-        anyhow::bail!("Usage: ./prog <tweet.json> <output.jpg>");
-    }
-    let tweet = args.next().expect("");
-    let output = args.next().expect("");
-    let tweet = read_to_string(&tweet)
-        .with_context(|| format!("读取推文 JSON 失败: {tweet}"))?;
-    let tweet: Tweet = serde_json::from_str(&tweet).context("解析推文 JSON 失败")?;
+fn render_twitter_card(tweet: &Tweet, output: &str, retweet_image: Option<&str>) -> Result<()> {
+    // 渲染文本部分
     let mut text = String::new();
     let (text_svg, last_y) = text_place(&tweet.full_text, PADDING, 64.0, CONTENT_WIDTH, 16.0);
+    // 如果有翻译，就渲染翻译
     text.push_str(&text_svg);
     let last_y = if !tweet.translated_text.is_empty() {
         let (split, last_y) = split_place(PADDING, last_y + PADDING, CONTENT_WIDTH);
@@ -176,8 +169,22 @@ fn main() -> Result<()> {
     } else {
         last_y
     };
-    let (image_svg, last_y) =
+    // 渲染图片
+    let (mut image_svg, last_y) =
         image_place(&tweet.media_urls, PADDING, last_y + PADDING, CONTENT_WIDTH)?;
+    // 如果有转发，就渲染转发
+    let last_y = if let Some(retweet_image) = retweet_image {
+        let (retweet_image_svg, last_y) = image_place(
+            &vec![retweet_image.to_string()],
+            PADDING,
+            last_y + PADDING,
+            CONTENT_WIDTH,
+        )?;
+        image_svg.push_str(&retweet_image_svg);
+        last_y
+    } else {
+        last_y
+    };
     let output_svg = read_to_string("tweet.tmpl")
         .context("读取 SVG 模板失败")?
         .replace("{{ HEIGHT }}", &(last_y + PADDING).to_string())
@@ -187,6 +194,24 @@ fn main() -> Result<()> {
         .replace("{{ ID }}", &tweet.screen_name)
         .replace("{{ TEXT }}", &text)
         .replace("{{ IMAGE }}", &image_svg);
-    println!("{}", &output_svg);
-    render_svg(output_svg.as_bytes(), &output, 95)
+    render_svg(output_svg.as_bytes(), &output, 95)?;
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    env_logger::init();
+    let mut args = args().skip(1);
+    if args.len() != 2 {
+        anyhow::bail!("Usage: ./prog <tweet.json> <output.jpg>");
+    }
+    let tweet = args.next().expect("");
+    let output = args.next().expect("");
+    let tweet = read_to_string(&tweet).with_context(|| format!("读取推文 JSON 失败: {tweet}"))?;
+    let tweet: Tweet = serde_json::from_str(&tweet).context("解析推文 JSON 失败")?;
+    let mut retweet_image = None;
+    if let Some(retweet) = &tweet.retweet {
+        retweet_image = Some("data/retweet.jpg");
+        render_twitter_card(&retweet, &retweet_image.expect("?"), None)?;
+    }
+    render_twitter_card(&tweet, &output, retweet_image)
 }
