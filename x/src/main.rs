@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
-use image::{ColorType, ImageReader};
+use image::{ImageBuffer, ImageReader, RgbaImage};
 use log::debug;
 use parley::{
     Alignment, AlignmentOptions, FontContext, Layout, LayoutContext, PositionedLayoutItem,
@@ -145,19 +145,13 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
         Transform::from_scale(SCALE, SCALE),
         &mut pixmap.as_mut(),
     );
-    // tiny-skia 是 RGBA，需要转换成 RGB
-    let rgba = pixmap.data();
-    let mut rgb = vec![0u8; (width * height * 3) as usize];
-    for (dst, src) in rgb.chunks_exact_mut(3).zip(rgba.chunks_exact(4)) {
-        dst[0] = src[0];
-        dst[1] = src[1];
-        dst[2] = src[2];
-    }
+    let img: RgbaImage =
+        ImageBuffer::from_raw(width, height, pixmap.take()).context("构造 RGBA 图像失败")?;
     // JPEG 编码
     let file = File::create(output_path)?;
     let writer = BufWriter::new(file);
     let mut encoder = JpegEncoder::new_with_quality(writer, quality);
-    encoder.encode(&rgb, width, height, ColorType::Rgb8.into())?;
+    encoder.encode_image(&img)?;
     Ok(())
 }
 
