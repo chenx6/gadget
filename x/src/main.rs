@@ -133,8 +133,10 @@ fn split_place(x: f32, y: f32, width: f32) -> (String, f32) {
 fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     // 解析 SVG
     const SCALE: f32 = 2.0;
-    let mut options = usvg::Options::default();
-    options.fontdb = FONTDB.clone();
+    let options = usvg::Options {
+        fontdb: FONTDB.clone(),
+        ..Default::default()
+    };
     let tree = usvg::Tree::from_data(svg_data, &options).context("解析 SVG 失败")?;
     let size = tree.size();
     let width = (size.width().ceil() * SCALE) as u32;
