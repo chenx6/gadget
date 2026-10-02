@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, FixedOffset};
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use image::{ImageBuffer, ImageReader, RgbaImage};
@@ -34,6 +35,7 @@ struct Tweet {
     #[serde(default)]
     translated_text: String,
     media_urls: Vec<String>,
+    created_at: String,
     retweet: Option<Box<Tweet>>,
 }
 
@@ -155,6 +157,14 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     Ok(())
 }
 
+fn format_time(input: &str) -> Result<String> {
+    let dt = DateTime::parse_from_str(input, "%a %b %d %H:%M:%S %z %Y")?;
+    let offset = FixedOffset::east_opt(8 * 3600).context("解析 FixedOffset 失败")?;
+    let dt_local = dt.with_timezone(&offset);
+    let output = dt_local.format("%-I:%M %p · %b %-d, %Y").to_string();
+    Ok(output)
+}
+
 fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(String, f32)> {
     let full_text = if tweet.full_text.starts_with("RT @") {
         "↩ Retweeted"
@@ -196,6 +206,14 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
     } else {
         last_y
     };
+    let tweeter_time = format_time(&tweet.created_at)?;
+    let (created, last_y) = text_place(
+        &tweeter_time,
+        PADDING,
+        last_y + PADDING,
+        CONTENT_WIDTH,
+        16.0,
+    );
     let height = last_y + PADDING;
     let output_svg = read_to_string("tweet.tmpl")
         .context("读取 SVG 模板失败")?
@@ -205,7 +223,8 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
         .replace("{{ USERNAME }}", &tweet.user_name)
         .replace("{{ ID }}", &tweet.screen_name)
         .replace("{{ TEXT }}", &text)
-        .replace("{{ IMAGE }}", &image_svg);
+        .replace("{{ IMAGE }}", &image_svg)
+        .replace("{{ CREATED_AT }}", &created);
     Ok((output_svg, height))
 }
 
