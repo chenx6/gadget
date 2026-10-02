@@ -119,7 +119,7 @@ def extract_tweets(data: dict):
             # 提取媒体图片
             media_urls = []
             for media in legacy.get("extended_entities", {}).get("media", []):
-                if media.get("type") == "photo":
+                if media.get("type") in ("photo", "video"):
                     media_urls.append(media.get("media_url_https", ""))
             retweet = None
             if (rs_result := legacy.get("retweeted_status_result")) or (

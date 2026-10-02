@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, FixedOffset};
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use image::{ImageBuffer, ImageReader, RgbaImage};
@@ -34,6 +35,7 @@ struct Tweet {
     #[serde(default)]
     translated_text: String,
     media_urls: Vec<String>,
+    created_at: String,
     retweet: Option<Box<Tweet>>,
 }
 
@@ -131,8 +133,10 @@ fn split_place(x: f32, y: f32, width: f32) -> (String, f32) {
 fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     // 解析 SVG
     const SCALE: f32 = 2.0;
-    let mut options = usvg::Options::default();
-    options.fontdb = FONTDB.clone();
+    let options = usvg::Options {
+        fontdb: FONTDB.clone(),
+        ..Default::default()
+    };
     let tree = usvg::Tree::from_data(svg_data, &options).context("解析 SVG 失败")?;
     let size = tree.size();
     let width = (size.width().ceil() * SCALE) as u32;
@@ -153,6 +157,14 @@ fn render_svg(svg_data: &[u8], output_path: &str, quality: u8) -> Result<()> {
     let mut encoder = JpegEncoder::new_with_quality(writer, quality);
     encoder.encode_image(&img)?;
     Ok(())
+}
+
+fn format_time(input: &str) -> Result<String> {
+    let dt = DateTime::parse_from_str(input, "%a %b %d %H:%M:%S %z %Y")?;
+    let offset = FixedOffset::east_opt(8 * 3600).context("解析 FixedOffset 失败")?;
+    let dt_local = dt.with_timezone(&offset);
+    let output = dt_local.format("%-I:%M %p · %b %-d, %Y").to_string();
+    Ok(output)
 }
 
 fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(String, f32)> {
@@ -196,6 +208,14 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
     } else {
         last_y
     };
+    let tweeter_time = format_time(&tweet.created_at)?;
+    let (created, last_y) = text_place(
+        &tweeter_time,
+        PADDING,
+        last_y + PADDING / 2.0, // 边框占据了部分 Padding, 所以手动去掉一些
+        CONTENT_WIDTH,
+        16.0,
+    );
     let height = last_y + PADDING;
     let output_svg = read_to_string("tweet.tmpl")
         .context("读取 SVG 模板失败")?
@@ -205,7 +225,8 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
         .replace("{{ USERNAME }}", &tweet.user_name)
         .replace("{{ ID }}", &tweet.screen_name)
         .replace("{{ TEXT }}", &text)
-        .replace("{{ IMAGE }}", &image_svg);
+        .replace("{{ IMAGE }}", &image_svg)
+        .replace("{{ CREATED_AT }}", &created);
     Ok((output_svg, height))
 }
 
