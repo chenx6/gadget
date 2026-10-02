@@ -210,7 +210,7 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
     let (created, last_y) = text_place(
         &tweeter_time,
         PADDING,
-        last_y + PADDING,
+        last_y + PADDING / 2.0, // 边框占据了部分 Padding, 所以手动去掉一些
         CONTENT_WIDTH,
         16.0,
     );
