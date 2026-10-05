@@ -1,3 +1,8 @@
+# /// script
+# dependencies = [
+#   "httpx"
+# ]
+# ///
 from time import sleep
 from subprocess import Popen
 from tomllib import load
