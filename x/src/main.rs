@@ -39,12 +39,18 @@ struct Tweet {
     retweet: Option<Box<Tweet>>,
 }
 
-fn text_place(text: &str, x: f32, y: f32, max_width: f32, font_size: f32) -> (String, f32) {
+fn text_place(
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<()>,
+    text: &str,
+    x: f32,
+    y: f32,
+    max_width: f32,
+    font_size: f32,
+) -> (String, f32) {
     let mut out = String::new();
     // 排版字体生成 layout
-    let mut font_cx = FontContext::new();
-    let mut layout_cx = LayoutContext::new();
-    let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+    let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
     builder.push_default(StyleProperty::FontSize(font_size));
     let mut layout: Layout<()> = builder.build(text);
     layout.break_all_lines(Some(max_width));
@@ -167,7 +173,12 @@ fn format_time(input: &str) -> Result<String> {
     Ok(output)
 }
 
-fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(String, f32)> {
+fn build_twitter_card(
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<()>,
+    tweet: &Tweet,
+    retweet: Option<(String, f32)>,
+) -> Result<(String, f32)> {
     let full_text = if tweet.full_text.starts_with("RT @") {
         "↩ Retweeted"
     } else {
@@ -175,7 +186,15 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
     };
     // 渲染文本部分
     let mut text = String::new();
-    let (text_svg, last_y) = text_place(full_text, PADDING, 64.0, CONTENT_WIDTH, 16.0);
+    let (text_svg, last_y) = text_place(
+        font_cx,
+        layout_cx,
+        full_text,
+        PADDING,
+        64.0,
+        CONTENT_WIDTH,
+        16.0,
+    );
     // 如果有翻译，就渲染翻译
     text.push_str(&text_svg);
     let last_y = if !tweet.translated_text.is_empty() {
@@ -183,6 +202,8 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
         text.push_str(&split);
         text.push('\n');
         let (translated_svg, last_y) = text_place(
+            font_cx,
+            layout_cx,
             &tweet.translated_text,
             PADDING,
             last_y + PADDING,
@@ -210,6 +231,8 @@ fn build_twitter_card(tweet: &Tweet, retweet: Option<(String, f32)>) -> Result<(
     };
     let tweeter_time = format_time(&tweet.created_at)?;
     let (created, last_y) = text_place(
+        font_cx,
+        layout_cx,
         &tweeter_time,
         PADDING,
         last_y + PADDING / 2.0, // 边框占据了部分 Padding, 所以手动去掉一些
@@ -240,14 +263,17 @@ fn main() -> Result<()> {
     let output = args.next().expect("unreachable");
     let tweet = read_to_string(&tweet).with_context(|| format!("读取推文 JSON 失败: {tweet}"))?;
     let tweet: Tweet = serde_json::from_str(&tweet).context("解析推文 JSON 失败")?;
+    let mut font_cx = FontContext::new();
+    font_cx.collection.load_fonts_from_paths(["font"]);
+    let mut layout_cx = LayoutContext::new();
     let retweet = if let Some(retweet) = &tweet.retweet {
         // 如果有转发推特，则先渲染
-        let (svg, height) = build_twitter_card(retweet, None)?;
+        let (svg, height) = build_twitter_card(&mut font_cx, &mut layout_cx, retweet, None)?;
         Some((svg, height))
     } else {
         None
     };
-    let (output_svg, _) = build_twitter_card(&tweet, retweet)?;
+    let (output_svg, _) = build_twitter_card(&mut font_cx, &mut layout_cx, &tweet, retweet)?;
     debug!("{}", output_svg);
     render_svg(output_svg.as_bytes(), &output, 95)
 }
