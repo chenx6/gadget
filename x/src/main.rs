@@ -5,8 +5,8 @@ use image::imageops::FilterType;
 use image::{ImageBuffer, ImageReader, RgbaImage};
 use log::debug;
 use parley::{
-    Alignment, AlignmentOptions, FontContext, Layout, LayoutContext, PositionedLayoutItem,
-    StyleProperty,
+    Alignment, AlignmentOptions, FontContext, GenericFamily, Layout, LayoutContext,
+    PositionedLayoutItem, StyleProperty,
 };
 use resvg::{tiny_skia, usvg};
 use serde::Deserialize;
@@ -275,6 +275,17 @@ fn main() -> Result<()> {
     let tweet: Tweet = serde_json::from_str(&tweet).context("解析推文 JSON 失败")?;
     let mut font_cx = FontContext::new();
     font_cx.collection.load_fonts_from_paths(["font"]);
+    // 给 parley 注册字体
+    for (generic, family) in [
+        (GenericFamily::SansSerif, "Source Han Sans CN"),
+        (GenericFamily::Emoji, "Noto Color Emoji"),
+    ] {
+        if let Some(id) = font_cx.collection.family_id(family) {
+            font_cx
+                .collection
+                .set_generic_families(generic, [id].into_iter());
+        }
+    }
     let mut layout_cx = LayoutContext::new();
     let retweet = if let Some(retweet) = &tweet.retweet {
         // 如果有转发推特，则先渲染
