@@ -20,6 +20,7 @@ use usvg::fontdb::Database;
 const PADDING: f32 = 16.0;
 const SVG_WIDTH: f32 = 600.0;
 const CONTENT_WIDTH: f32 = SVG_WIDTH - PADDING * 2.0;
+const DEFAULT_TEMPLATE: &str = include_str!("../tweet.tmpl");
 static FONTDB: LazyLock<Arc<Database>> = LazyLock::new(|| {
     let mut db = Database::new();
     db.load_fonts_dir("font");
@@ -173,11 +174,19 @@ fn format_time(input: &str) -> Result<String> {
     Ok(output)
 }
 
+fn load_template(path: Option<&str>) -> Result<String> {
+    match path {
+        Some(p) => read_to_string(p).with_context(|| format!("读取 SVG 模板失败: {p}")),
+        None => Ok(DEFAULT_TEMPLATE.to_string()),
+    }
+}
+
 fn build_twitter_card(
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<()>,
     tweet: &Tweet,
     retweet: Option<(String, f32)>,
+    template: &str,
 ) -> Result<(String, f32)> {
     let full_text = if tweet.full_text.starts_with("RT @") {
         "↩ Retweeted"
@@ -240,8 +249,7 @@ fn build_twitter_card(
         16.0,
     );
     let height = last_y + PADDING;
-    let output_svg = read_to_string("tweet.tmpl")
-        .context("读取 SVG 模板失败")?
+    let output_svg = template
         .replace("{{ HEIGHT }}", &height.to_string())
         .replace("{{ BORDER_HEIGHT }}", &(height - 1.0).to_string())
         .replace("{{ AVATAR }}", &tweet.avatar_url)
@@ -256,11 +264,13 @@ fn build_twitter_card(
 fn main() -> Result<()> {
     env_logger::init();
     let mut args = args().skip(1);
-    if args.len() != 2 {
-        anyhow::bail!("Usage: ./prog <tweet.json> <output.jpg>");
+    if args.len() < 2 || args.len() > 3 {
+        anyhow::bail!("Usage: ./prog <tweet.json> <output.jpg> [template.tmpl]");
     }
     let tweet = args.next().expect("unreachable");
     let output = args.next().expect("unreachable");
+    let template_path = args.next();
+    let template = load_template(template_path.as_deref())?;
     let tweet = read_to_string(&tweet).with_context(|| format!("读取推文 JSON 失败: {tweet}"))?;
     let tweet: Tweet = serde_json::from_str(&tweet).context("解析推文 JSON 失败")?;
     let mut font_cx = FontContext::new();
@@ -268,12 +278,14 @@ fn main() -> Result<()> {
     let mut layout_cx = LayoutContext::new();
     let retweet = if let Some(retweet) = &tweet.retweet {
         // 如果有转发推特，则先渲染
-        let (svg, height) = build_twitter_card(&mut font_cx, &mut layout_cx, retweet, None)?;
+        let (svg, height) =
+            build_twitter_card(&mut font_cx, &mut layout_cx, retweet, None, &template)?;
         Some((svg, height))
     } else {
         None
     };
-    let (output_svg, _) = build_twitter_card(&mut font_cx, &mut layout_cx, &tweet, retweet)?;
+    let (output_svg, _) =
+        build_twitter_card(&mut font_cx, &mut layout_cx, &tweet, retweet, &template)?;
     debug!("{}", output_svg);
     render_svg(output_svg.as_bytes(), &output, 95)
 }

@@ -6,7 +6,6 @@ Fetcher:
 
 ```bash
 # Edit header.json to add request header
-# Put NotoColorEmoji.ttf, SourceHanSansCN-Medium.otf and SourceHanSansCN-VF.otf into font/ folder
 # Set TWITTER_LIST_ID environment variable
 $ export TWITTER_LIST_ID=2101633191509622929
 # Run!
@@ -17,6 +16,7 @@ $ uv run src/twitter.py
 Renderer:
 
 ```bash
+# Put NotoColorEmoji.ttf, SourceHanSansCN-Medium.otf and SourceHanSansCN-VF.otf into font/ folder
 # Build
 $ RUSTFLAGS="-C target-cpu=native" cargo build --release
 # Render
