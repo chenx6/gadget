@@ -21,6 +21,8 @@ const PADDING: f32 = 16.0;
 const SVG_WIDTH: f32 = 600.0;
 const CONTENT_WIDTH: f32 = SVG_WIDTH - PADDING * 2.0;
 const DEFAULT_TEMPLATE: &str = include_str!("../tweet.tmpl");
+const TEXT_FAMILY: &str = "Source Han Sans CN";
+const EMOJI_FAMILY: &str = "Noto Color Emoji";
 static FONTDB: LazyLock<Arc<Database>> = LazyLock::new(|| {
     let mut db = Database::new();
     db.load_fonts_dir("font");
@@ -40,6 +42,22 @@ struct Tweet {
     retweet: Option<Box<Tweet>>,
 }
 
+fn escape_xml(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// 返回 emoji 字体的 (blob id, index)，用于判断某个 run 是否使用了 emoji 字体。
+fn emoji_font_key(font_cx: &mut FontContext) -> Option<(u64, u32)> {
+    let family_id = font_cx.collection.family_id(EMOJI_FAMILY)?;
+    let family = font_cx.collection.family(family_id)?;
+    let font = family.default_font()?;
+    let index = font.index();
+    let blob = font.load(Some(&mut font_cx.source_cache))?;
+    Some((blob.id(), index))
+}
+
 fn text_place(
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<()>,
@@ -50,6 +68,7 @@ fn text_place(
     font_size: f32,
 ) -> (String, f32) {
     let mut out = String::new();
+    let emoji_key = emoji_font_key(font_cx);
     // 排版字体生成 layout
     let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
     builder.push_default(StyleProperty::FontSize(font_size));
@@ -58,26 +77,34 @@ fn text_place(
     layout.align(Alignment::Start, AlignmentOptions::default());
     let mut last_y: f32 = 0.0;
     for line in layout.lines() {
-        let range = line.text_range();
-        let line_text = &text[range];
-        let baseline = line
-            .items()
-            .find_map(|item| {
-                if let PositionedLayoutItem::GlyphRun(run) = item {
-                    Some(run.baseline())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(0.0);
-        out.push_str(&format!(
-            r#"  <text x="{:.2}" y="{:.2}">{}</text>"#,
-            x,
-            y + baseline,
-            line_text.trim()
-        ));
-        out.push('\n');
-        last_y = last_y.max(y + baseline);
+        for item in line.items() {
+            // 按 parley 解析出的字体拆分 run，并用其算出的横向位置精确定位。
+            let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
+                continue;
+            };
+            let baseline = glyph_run.baseline();
+            last_y = last_y.max(y + baseline);
+            let run = glyph_run.run();
+            let piece = text[run.text_range()].trim_end();
+            if piece.is_empty() {
+                continue;
+            }
+            // 通过当前 glyph_run 的 font id 判断是否为 emoji
+            let font = run.font();
+            let family = if emoji_key == Some((font.data.id(), font.index)) {
+                EMOJI_FAMILY
+            } else {
+                TEXT_FAMILY
+            };
+            out.push_str(&format!(
+                r#"  <text x="{:.2}" y="{:.2}" font-family="{}">{}</text>"#,
+                x + glyph_run.offset(),
+                y + baseline,
+                family,
+                escape_xml(piece)
+            ));
+            out.push('\n');
+        }
     }
     (out, last_y)
 }
@@ -281,8 +308,8 @@ fn main() -> Result<()> {
     font_cx.collection.load_fonts_from_paths(["font"]);
     // 给 parley 注册字体
     for (generic, family) in [
-        (GenericFamily::SansSerif, "Source Han Sans CN"),
-        (GenericFamily::Emoji, "Noto Color Emoji"),
+        (GenericFamily::SansSerif, TEXT_FAMILY),
+        (GenericFamily::Emoji, EMOJI_FAMILY),
     ] {
         if let Some(id) = font_cx.collection.family_id(family) {
             font_cx
