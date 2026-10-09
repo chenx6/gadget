@@ -253,7 +253,7 @@ fn build_twitter_card(
         last_y
     };
     // 渲染图片
-    let (mut image_svg, last_y) = if only_retweet {
+    let (mut image_svg, last_y) = if only_retweet || tweet.media_urls.is_empty() {
         (String::new(), last_y)
     } else {
         image_place(&tweet.media_urls, PADDING, last_y + PADDING, CONTENT_WIDTH)?
@@ -261,11 +261,12 @@ fn build_twitter_card(
     // 如果有转发，就把转发卡片的 SVG 直接嵌套进来
     let last_y = if let Some((retweet_svg, retweet_height)) = retweet {
         let scale = CONTENT_WIDTH / SVG_WIDTH;
+        let retweet_y = last_y + PADDING;
         image_svg.push_str(&format!(
-            r#"<g transform="translate({PADDING} {last_y}) scale({scale})">{retweet_svg}</g>"#
+            r#"<g transform="translate({PADDING} {retweet_y}) scale({scale})">{retweet_svg}</g>"#
         ));
         image_svg.push('\n');
-        last_y + retweet_height * scale
+        retweet_y + retweet_height * scale
     } else {
         last_y
     };
