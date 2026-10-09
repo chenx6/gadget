@@ -235,11 +235,10 @@ fn build_twitter_card(
     let last_y = if let Some((retweet_svg, retweet_height)) = retweet {
         let scale = CONTENT_WIDTH / SVG_WIDTH;
         image_svg.push_str(&format!(
-            r#"<g transform="translate({PADDING} {}) scale({scale})">{retweet_svg}</g>"#,
-            last_y + PADDING
+            r#"<g transform="translate({PADDING} {last_y}) scale({scale})">{retweet_svg}</g>"#
         ));
         image_svg.push('\n');
-        last_y + retweet_height * scale + PADDING
+        last_y + retweet_height * scale
     } else {
         last_y
     };
