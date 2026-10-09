@@ -188,7 +188,8 @@ fn build_twitter_card(
     retweet: Option<(String, f32)>,
     template: &str,
 ) -> Result<(String, f32)> {
-    let full_text = if tweet.full_text.starts_with("RT @") {
+    let only_retweet = tweet.full_text.starts_with("RT @");
+    let full_text = if only_retweet {
         "↩ Retweeted"
     } else {
         &tweet.full_text
@@ -225,8 +226,11 @@ fn build_twitter_card(
         last_y
     };
     // 渲染图片
-    let (mut image_svg, last_y) =
-        image_place(&tweet.media_urls, PADDING, last_y + PADDING, CONTENT_WIDTH)?;
+    let (mut image_svg, last_y) = if only_retweet {
+        (String::new(), last_y)
+    } else {
+        image_place(&tweet.media_urls, PADDING, last_y + PADDING, CONTENT_WIDTH)?
+    };
     // 如果有转发，就把转发卡片的 SVG 直接嵌套进来
     let last_y = if let Some((retweet_svg, retweet_height)) = retweet {
         let scale = CONTENT_WIDTH / SVG_WIDTH;
