@@ -1,7 +1,9 @@
 from argparse import ArgumentParser
+from hashlib import md5
 from json import dump, load
 from os import environ
 from pathlib import Path
+from re import sub
 from typing import TypedDict
 
 import numpy as np
@@ -90,6 +92,38 @@ def embedding(texts: list[str], batch_size: int = 256):
     return arr / norms
 
 
+def winnow(text: str, k: int = 5, window: int = 4):
+    text = "".join(text.lower().split())
+    kgrams = [text[i : i + k] for i in range(len(text) - k + 1)]
+    hashes = [int(md5(g.encode()).hexdigest(), 16) for g in kgrams]
+    fingerprints: dict[int, int] = {}
+    last_pos = -1
+    # Slide a window over the hashes
+    for start in range(len(hashes) - window + 1):
+        win = hashes[start : start + window]
+        # Select the minimum in each window
+        smallest = min(win)
+        pos = start + len(win) - 1 - win[::-1].index(smallest)  # rightmost minimum
+        if pos != last_pos:
+            # Record when position changed
+            fingerprints[pos] = smallest
+            last_pos = pos
+    return set(fingerprints.values())
+
+
+def canonicalize(text: str) -> str:
+    text = sub(r"//[^\n]*", "", text)  # comments
+    text = sub(r"sub_[0-9A-Fa-f]+", "sub_X", text)  # function/callee names
+    text = sub(r"\b[a-z]\d+\b", "var", text)  # v9, a1, v2, ...
+    text = sub(r"__\w+", "", text)  # __fastcall, __int64, ...
+    return text
+
+
+def jaccard(a: set[int], b: set[int]) -> float:
+    union = a | b
+    return len(a & b) / len(union) if union else 0.0
+
+
 def index(repo_path: Path, index_folder: Path):
     funcs = chunk_files(repo_path)
     vecs = embedding([i["content"] for i in funcs])
@@ -100,26 +134,43 @@ def index(repo_path: Path, index_folder: Path):
         dump(funcs, f)
 
 
-def search(query: Path | str, index_folder: Path, top_k: int):
+def search(
+    query: Path | str,
+    index_folder: Path,
+    top_k: int,
+    lexical_weight: float = 3.0,
+    candidate_factor: int = 10,
+):
     # Read query
     if isinstance(query, str):
+        query_text = query
         # Add prefix for better query result
-        query = "Query: " + query
+        query_embed_text = "Query: " + query_text
     else:
         # Read code file directly
-        query = query.read_text()
+        query_text = query.read_text()
+        query_embed_text = query_text
     # Generate vector and search
-    query_vec = embedding([query])
+    query_vec = embedding([query_embed_text])
     index = read_index(str(index_folder / "index.faiss"))
-    scores, ids = index.search(query_vec, top_k)
     with open(index_folder / "chunks.json") as f:
         funcs: list[Function] = load(f)
-    for rank, (score, i) in enumerate(zip(scores[0], ids[0]), 1):
-        i: int
+    n_candidates = min(len(funcs), max(top_k * candidate_factor, top_k))
+    scores, ids = index.search(query_vec, n_candidates)
+    # Rerank candidates by combining cosine similarity with winnowing
+    query_fp = winnow(canonicalize(query_text))
+    reranked: list[tuple[float, float, float, int]] = []
+    for score, i in zip(scores[0], ids[0]):
+        i = int(i)
         if i < 0:
             continue
+        lexical = jaccard(query_fp, winnow(canonicalize(funcs[i]["content"])))
+        combined = float(score) + lexical_weight * lexical
+        reranked.append((combined, float(score), lexical, i))
+    reranked.sort(key=lambda item: item[0], reverse=True)
+    for rank, (combined, score, lexical, i) in enumerate(reranked[:top_k], 1):
         f = funcs[i]
-        print("// ", rank, score, f["declaration"])
+        print(f"// {rank}. cosine={score:.4f} jaccard={lexical:.4f}", f["declaration"])
         for idx, line in enumerate(f["content"].split("\n")):
             if idx > 15:
                 break
