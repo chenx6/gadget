@@ -28,7 +28,7 @@ def split_window(content: str, window_size: int = 1500):
     curr_window_len = 0
     for line in lines:
         curr_window.append(line)
-        curr_window_len += len(line)
+        curr_window_len += len(line.strip())
         if curr_window_len > window_size:
             windows.append("\n".join(curr_window))
             curr_window = []
