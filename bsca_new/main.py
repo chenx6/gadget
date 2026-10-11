@@ -38,7 +38,7 @@ def split_window(content: str, window_size: int = 1500):
     return windows
 
 
-def chunk_files(repo_path: Path, min_func_len: int = 190) -> list[Function]:
+def chunk_files(repo_path: Path, min_func_len: int = 10) -> list[Function]:
     c_lang = Language(language())
     parser = Parser(c_lang)
     query = Query(c_lang, "(function_definition declarator: (_)@decl)@fnc_def")
