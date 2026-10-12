@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from bisect import bisect_right
 from hashlib import md5
 from json import dump, load
 from os import environ
@@ -16,11 +17,12 @@ client = OpenAI()
 EMBEDDING_MODEL = environ["OPENAI_DEFAULT_MODEL"]
 
 
-class Function(TypedDict):
+class FunctionRecord(TypedDict):
     path: str
     declaration: str
     content: str
-    index: int
+    fingerprint: list[int]
+    n_windows: int
 
 
 def split_window(content: str, window_size: int = 1000):
@@ -40,12 +42,15 @@ def split_window(content: str, window_size: int = 1000):
     return windows
 
 
-def chunk_files(repo_path: Path, min_func_len: int = 10) -> list[Function]:
+def chunk_files(
+    repo_path: Path, min_func_len: int = 10
+) -> tuple[list[FunctionRecord], list[str]]:
     c_lang = Language(language())
     parser = Parser(c_lang)
     query = Query(c_lang, "(function_definition declarator: (_)@decl)@fnc_def")
     cur = QueryCursor(query)
-    funcs: list[Function] = []
+    funcs: list[FunctionRecord] = []
+    window_texts: list[str] = []
     for file in repo_path.rglob("*.c"):
         file_content = file.read_bytes()
         tree = parser.parse(file_content)
@@ -66,17 +71,17 @@ def chunk_files(repo_path: Path, min_func_len: int = 10) -> list[Function]:
                 .replace(func_name, "sub_0")
             )
             windows = split_window(content)
-            for idx, window in enumerate(windows):
-                # Split to small window for better query
-                funcs.append(
-                    {
-                        "path": str(file),
-                        "declaration": declaration,
-                        "content": window,
-                        "index": idx,
-                    }
-                )
-    return funcs
+            window_texts.extend(windows)
+            funcs.append(
+                {
+                    "path": str(file),
+                    "declaration": declaration,
+                    "content": content,
+                    "fingerprint": sorted(winnow(canonicalize(content))),
+                    "n_windows": len(windows),
+                }
+            )
+    return funcs, window_texts
 
 
 def embedding(texts: list[str], batch_size: int = 256):
@@ -117,6 +122,8 @@ def canonicalize(text: str) -> str:
     """
     text = sub(r"//[^\n]*", "", text)  # comments
     text = sub(r"sub_[0-9A-Fa-f]+", "sub_X", text)  # function/callee names
+    text = sub(r"\ba\d+:\s*", "", text)  # named-arg syntax: a2: &v19
+    text = sub(r"LABEL_\d+", "LABEL", text)  # goto labels
     text = sub(r"\b[a-z]\d+\b", "var", text)  # v9, a1, v2, ...
     text = sub(r"__\w+", "", text)  # __fastcall, __int64, ...
     return text
@@ -136,12 +143,12 @@ def jaccard(a: set[int], b: set[int]) -> float:
 
 
 def index(repo_path: Path, index_folder: Path):
-    funcs = chunk_files(repo_path)
-    vecs = embedding([embedding_preprocess(i["content"]) for i in funcs])
+    funcs, window_texts = chunk_files(repo_path)
+    vecs = embedding([embedding_preprocess(t) for t in window_texts])
     index = IndexFlatIP(vecs.shape[1])  # inner product on normalized vectors = cosine
     index.add(vecs)
     write_index(index, str(index_folder / "index.faiss"))
-    with open(index_folder / "chunks.json", "w") as f:
+    with open(index_folder / "func.json", "w") as f:
         dump(funcs, f)
 
 
@@ -164,20 +171,28 @@ def search(
     # Generate vector and search
     query_vec = embedding([embedding_preprocess(query_embed_text)])
     index = read_index(str(index_folder / "index.faiss"))
-    with open(index_folder / "chunks.json") as f:
-        funcs: list[Function] = load(f)
-    n_candidates = min(len(funcs), max(top_k * candidate_factor, top_k))
-    scores, ids = index.search(query_vec, n_candidates)
-    # Rerank candidates by combining cosine similarity with winnowing
+    n_candidates = min(index.ntotal, max(top_k * candidate_factor, top_k))
+    _, ids = index.search(query_vec, n_candidates)
+    # Rerank
+    with open(index_folder / "func.json") as f:
+        funcs: list[FunctionRecord] = load(f)
+    #  offsets[function_index] => window index start
+    #  offsets[function_index+1] => window index end
+    offsets = [0]
+    for f in funcs:
+        offsets.append(offsets[-1] + f["n_windows"])
+    candidate_funcs = {bisect_right(offsets, int(i)) - 1 for i in ids[0] if i >= 0}
     query_fp = winnow(canonicalize(query_text))
     reranked: list[tuple[float, float, float, int]] = []
-    for score, i in zip(scores[0], ids[0]):
-        i = int(i)
-        if i < 0:
-            continue
-        lexical = jaccard(query_fp, winnow(canonicalize(funcs[i]["content"])))
-        combined = float(score) + lexical_weight * lexical
-        reranked.append((combined, float(score), lexical, i))
+    for k in candidate_funcs:
+        # Take max cosine over all windows of the function
+        best_cos = max(
+            float(np.dot(index.reconstruct(r), query_vec[0]))
+            for r in range(offsets[k], offsets[k + 1])
+        )
+        lexical = jaccard(query_fp, set(funcs[k]["fingerprint"]))
+        combined = best_cos + lexical_weight * lexical
+        reranked.append((combined, best_cos, lexical, k))
     reranked.sort(key=lambda item: item[0], reverse=True)
     for rank, (combined, score, lexical, i) in enumerate(reranked[:top_k], 1):
         f = funcs[i]
