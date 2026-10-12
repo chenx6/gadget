@@ -23,7 +23,7 @@ class Function(TypedDict):
     index: int
 
 
-def split_window(content: str, window_size: int = 1500):
+def split_window(content: str, window_size: int = 1000):
     lines = content.splitlines()
     windows: list[str] = []
     curr_window: list[str] = []
