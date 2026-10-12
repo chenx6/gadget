@@ -112,11 +112,22 @@ def winnow(text: str, k: int = 5, window: int = 4):
 
 
 def canonicalize(text: str) -> str:
+    """
+    Canonicalize input for winnowing, canonicalize before embedding will cause downgrade
+    """
     text = sub(r"//[^\n]*", "", text)  # comments
     text = sub(r"sub_[0-9A-Fa-f]+", "sub_X", text)  # function/callee names
     text = sub(r"\b[a-z]\d+\b", "var", text)  # v9, a1, v2, ...
     text = sub(r"__\w+", "", text)  # __fastcall, __int64, ...
     return text
+
+
+def embedding_preprocess(text: str):
+    """
+    Strip comment and remove whitespace
+    """
+    text = sub(r"//[^\n]*", "", text)
+    return " ".join(text.split())
 
 
 def jaccard(a: set[int], b: set[int]) -> float:
@@ -126,7 +137,7 @@ def jaccard(a: set[int], b: set[int]) -> float:
 
 def index(repo_path: Path, index_folder: Path):
     funcs = chunk_files(repo_path)
-    vecs = embedding([i["content"] for i in funcs])
+    vecs = embedding([embedding_preprocess(i["content"]) for i in funcs])
     index = IndexFlatIP(vecs.shape[1])  # inner product on normalized vectors = cosine
     index.add(vecs)
     write_index(index, str(index_folder / "index.faiss"))
@@ -151,7 +162,7 @@ def search(
         query_text = query.read_text()
         query_embed_text = query_text
     # Generate vector and search
-    query_vec = embedding([query_embed_text])
+    query_vec = embedding([embedding_preprocess(query_embed_text)])
     index = read_index(str(index_folder / "index.faiss"))
     with open(index_folder / "chunks.json") as f:
         funcs: list[Function] = load(f)
