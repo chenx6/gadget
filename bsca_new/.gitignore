@@ -11,4 +11,5 @@ wheels/
 
 # Project related
 .env
+test_repo/
 index/
